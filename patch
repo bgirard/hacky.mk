@@ -1,4 +1,4 @@
-X-Git-Commit-ID: b8a74fabb8acad28b7dbbc2cb4247780c7cb8c0f
+X-Git-Commit-ID: 054bb6e0514b5b44f777d2bbe84da9440bb7fbb3
 From: Ehsan Akhgari <ehsan@mozilla.com>
 Subject: hacky.mk
 
@@ -35,10 +35,35 @@ index 95a0e25137829b9c1026558092a3f43c36f6a65a..13d74fcdf4b45ada3331b249ebabd19a
  save-mozconfig: $(FOUND_MOZCONFIG)
  	-cp $(FOUND_MOZCONFIG) $(OBJDIR)/.mozconfig
 diff --git a/config/rules.mk b/config/rules.mk
-index 0a2cfe017d7815bf4bfa7ad19721c5b341c50d81..62ab5ee4685943ba60b91ddbda620b6016fda997 100644
+index 0a2cfe017d7815bf4bfa7ad19721c5b341c50d81..f1d3cb1672451588bd82e17af2ea01bddc33e802 100644
 --- a/config/rules.mk
 +++ b/config/rules.mk
-@@ -969,21 +969,27 @@ ifdef DTRACE_PROBE_OBJ
+@@ -703,16 +703,24 @@ endif # SUPPRESS_DEFAULT_RULES
+ ifeq ($(filter s,$(MAKEFLAGS)),)
+ ECHO := echo
+ QUIET :=
+ else
+ ECHO := true
+ QUIET := -q
+ endif
+ 
++# On Mac, the system echo is a BSD tool which does not accept the -e
++# argument, but it's implicit there.
++ifeq ($(HOST_OS_ARCH),Darwin)
++HACKY_ECHO := echo
++else
++HACKY_ECHO := echo -e
++endif
++
+ # This function is called and evaluated to produce the rule to build the
+ # specified tier. Each tier begins by building the "static" directories.
+ # The BUILDSTATUS echo commands are used to faciliate easier parsing
+ # of build output. Build drivers are encouraged to filter these lines
+ # from the user.
+ define CREATE_TIER_RULE
+ tier_$(1)::
+ 	@echo "BUILDSTATUS TIER_START $(1)"
+@@ -969,21 +977,27 @@ ifdef DTRACE_PROBE_OBJ
  EXTRA_DEPS += $(DTRACE_PROBE_OBJ)
  OBJS += $(DTRACE_PROBE_OBJ)
  endif
@@ -47,17 +72,17 @@ index 0a2cfe017d7815bf4bfa7ad19721c5b341c50d81..62ab5ee4685943ba60b91ddbda620b60
  	$(RM) $(LIBRARY)
  	$(EXPAND_AR) $(AR_FLAGS) $(OBJS) $(LOBJS) $(SHARED_LIBRARY_LIBS)
  	$(RANLIB) $@
-+	echo -e "$(realpath .)/$(notdir $@): $(realpath $(OBJS)) $(realpath $(LOBJS)) $(EXTRA_DEPS) $(realpath .)/Makefile" > $(DEPTH)/.hacky/$(notdir $@).hacky
-+	echo -e "\tcd $(realpath .) && $(RM) $(LIBRARY) && $(EXPAND_AR) $(AR_FLAGS) $(OBJS) $(LOBJS) $(SHARED_LIBRARY_LIBS) && $(RANLIB) $@" >> $(DEPTH)/.hacky/$(notdir $@).hacky
-+	echo -e "all: $(realpath .)/$(notdir $@)\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
++	$(HACKY_ECHO) "$(realpath .)/$(notdir $@): $(realpath $(OBJS)) $(realpath $(LOBJS)) $(EXTRA_DEPS) $(realpath .)/Makefile" > $(DEPTH)/.hacky/$(notdir $@).hacky
++	$(HACKY_ECHO) "\tcd $(realpath .) && $(RM) $(LIBRARY) && $(EXPAND_AR) $(AR_FLAGS) $(OBJS) $(LOBJS) $(SHARED_LIBRARY_LIBS) && $(RANLIB) $@" >> $(DEPTH)/.hacky/$(notdir $@).hacky
++	$(HACKY_ECHO) "all: $(realpath .)/$(notdir $@)\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
  
  $(filter-out %.$(LIB_SUFFIX),$(LIBRARY)): $(filter %.$(LIB_SUFFIX),$(LIBRARY)) $(OBJS) $(LOBJS) $(EXTRA_DEPS) $(GLOBAL_DEPS)
  # When we only build a library descriptor, blow out any existing library
  	$(if $(filter %.$(LIB_SUFFIX),$(LIBRARY)),,$(RM) $(REAL_LIBRARY) $(EXPORT_LIBRARY:%=%/$(REAL_LIBRARY)))
  	$(EXPAND_LIBS_GEN) -o $@ $(OBJS) $(LOBJS) $(SHARED_LIBRARY_LIBS)
-+	echo -e "$(realpath .)/$(notdir $@): $(realpath $(filter %.$(LIB_SUFFIX),$(LIBRARY)) $(realpath $(OBJS)) $(realpath $(LOBJS)) $(EXTRA_DEPS)) $(realpath .)/Makefile" > $(DEPTH)/.hacky/$(notdir $@).hacky
-+	echo -e "\tcd $(realpath .) && $(if $(filter %.$(LIB_SUFFIX),$(LIBRARY)),,$(RM) $(REAL_LIBRARY) $(EXPORT_LIBRARY:%=%/$(REAL_LIBRARY))) && $(EXPAND_LIBS_GEN) -o $@ $(OBJS) $(LOBJS) $(SHARED_LIBRARY_LIBS) $@" >> $(DEPTH)/.hacky/$(notdir $@).hacky
-+	echo -e "all: $(realpath .)/$(notdir $@)\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
++	$(HACKY_ECHO) "$(realpath .)/$(notdir $@): $(realpath $(filter %.$(LIB_SUFFIX),$(LIBRARY)) $(realpath $(OBJS)) $(realpath $(LOBJS)) $(EXTRA_DEPS)) $(realpath .)/Makefile" > $(DEPTH)/.hacky/$(notdir $@).hacky
++	$(HACKY_ECHO) "\tcd $(realpath .) && $(if $(filter %.$(LIB_SUFFIX),$(LIBRARY)),,$(RM) $(REAL_LIBRARY) $(EXPORT_LIBRARY:%=%/$(REAL_LIBRARY))) && $(EXPAND_LIBS_GEN) -o $@ $(OBJS) $(LOBJS) $(SHARED_LIBRARY_LIBS) $@" >> $(DEPTH)/.hacky/$(notdir $@).hacky
++	$(HACKY_ECHO) "all: $(realpath .)/$(notdir $@)\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
  
  ifeq ($(OS_ARCH),WINNT)
  # Import libraries are created by the rules creating shared libraries.
@@ -66,7 +91,7 @@ index 0a2cfe017d7815bf4bfa7ad19721c5b341c50d81..62ab5ee4685943ba60b91ddbda620b60
  # when rebuilding the corresponding shared library. Defining an empty recipe
  # for import libraries forces make to wait for the shared library recipe to
  # have run before considering other targets that depend on the import library.
-@@ -1027,28 +1033,33 @@ endif
+@@ -1027,28 +1041,33 @@ endif
  
  # On Darwin (Mac OS X), dwarf2 debugging uses debug info left in .o files,
  # so instead of deleting .o files after repacking them into a dylib, we make
@@ -75,10 +100,10 @@ index 0a2cfe017d7815bf4bfa7ad19721c5b341c50d81..62ab5ee4685943ba60b91ddbda620b60
  
  $(SHARED_LIBRARY): $(OBJS) $(LOBJS) $(DEF_FILE) $(RESFILE) $(LIBRARY) $(EXTRA_DEPS) $(GLOBAL_DEPS)
  	$(info $(notdir $@))
-+	echo -e "$(realpath .)/$(notdir $@): $(realpath $(OBJS)) $(realpath $(LOBJS)) $(DEF_FILE) $(LIBRARY) $(EXTRA_DEPS) $(realpath .)/Makefile" > $(DEPTH)/.hacky/$(notdir $@).hacky
++	$(HACKY_ECHO) "$(realpath .)/$(notdir $@): $(realpath $(OBJS)) $(realpath $(LOBJS)) $(DEF_FILE) $(LIBRARY) $(EXTRA_DEPS) $(realpath .)/Makefile" > $(DEPTH)/.hacky/$(notdir $@).hacky
  ifndef INCREMENTAL_LINKER
  	$(RM) $@
-+	echo -e "\tcd $(realpath .) && $(RM) $@" >> $(DEPTH)/.hacky/$(notdir $@).hacky
++	$(HACKY_ECHO) "\tcd $(realpath .) && $(RM) $@" >> $(DEPTH)/.hacky/$(notdir $@).hacky
  endif
  ifdef DTRACE_LIB_DEPENDENT
  ifndef XP_MACOSX
@@ -88,10 +113,10 @@ index 0a2cfe017d7815bf4bfa7ad19721c5b341c50d81..62ab5ee4685943ba60b91ddbda620b60
  	@$(RM) $(DTRACE_PROBE_OBJ)
  else # ! DTRACE_LIB_DEPENDENT
  	$(EXPAND_MKSHLIB) $(SHLIB_LDSTARTFILE) $(OBJS) $(LOBJS) $(SUB_SHLOBJS) $(RESFILE) $(LDFLAGS) $(WRAP_LDFLAGS) $(SHARED_LIBRARY_LIBS) $(EXTRA_DSO_LDOPTS) $(MOZ_GLUE_LDFLAGS) $(OS_LIBS) $(EXTRA_LIBS) $(DEF_FILE) $(SHLIB_LDENDFILE) $(if $(LIB_IS_C_ONLY),,$(STLPORT_LIBS))
-+	echo -e "\tcd $(realpath .) && $(subst ",\",$(EXPAND_MKSHLIB)) $(subst ",\",$(SHLIB_LDSTARTFILE)) $(subst ",\",$(OBJS)) $(subst ",\",$(LOBJS)) $(subst ",\",$(SUB_SHLOBJS)) $(subst ",\",$(RESFILE)) $(subst ",\",$(LDFLAGS)) $(subst ",\",$(WRAP_LDFLAGS)) $(subst ",\",$(SHARED_LIBRARY_LIBS)) $(subst ",\",$(EXTRA_DSO_LDOPTS)) $(subst ",\",$(MOZ_GLUE_LDFLAGS)) $(subst ",\",$(OS_LIBS)) $(subst ",\",$(EXTRA_LIBS)) $(subst ",\",$(DEF_FILE)) $(subst ",\",$(SHLIB_LDENDFILE))\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
++	$(HACKY_ECHO) "\tcd $(realpath .) && $(subst ",\",$(EXPAND_MKSHLIB)) $(subst ",\",$(SHLIB_LDSTARTFILE)) $(subst ",\",$(OBJS)) $(subst ",\",$(LOBJS)) $(subst ",\",$(SUB_SHLOBJS)) $(subst ",\",$(RESFILE)) $(subst ",\",$(LDFLAGS)) $(subst ",\",$(WRAP_LDFLAGS)) $(subst ",\",$(SHARED_LIBRARY_LIBS)) $(subst ",\",$(EXTRA_DSO_LDOPTS)) $(subst ",\",$(MOZ_GLUE_LDFLAGS)) $(subst ",\",$(OS_LIBS)) $(subst ",\",$(EXTRA_LIBS)) $(subst ",\",$(DEF_FILE)) $(subst ",\",$(SHLIB_LDENDFILE))\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
 +	$(topsrcdir)/tools/hackymake/abspp.py < $(MDDEPDIR)/$(@F).pp >> $(DEPTH)/.hacky/$(notdir $@).hacky
  endif # DTRACE_LIB_DEPENDENT
-+	echo -e "\nall: $(realpath .)/$(notdir $@)\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
++	$(HACKY_ECHO) "\nall: $(realpath .)/$(notdir $@)\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
  	@$(call CHECK_STDCXX,$@)
  
  ifeq (_WINNT,$(GNU_CC)_$(OS_ARCH))
@@ -100,7 +125,7 @@ index 0a2cfe017d7815bf4bfa7ad19721c5b341c50d81..62ab5ee4685943ba60b91ddbda620b60
  	@if test -f $@.manifest; then \
  		mt.exe -NOLOGO -MANIFEST $@.manifest -OUTPUTRESOURCE:$@\;$(EMBED_MANIFEST_AT); \
  		rm -f $@.manifest; \
-@@ -1139,21 +1150,29 @@ $(SOBJS): %.$(OBJ_SUFFIX): %.S
+@@ -1139,21 +1158,29 @@ $(SOBJS): %.$(OBJ_SUFFIX): %.S
  
  #
  # Please keep the next two rules in sync.
@@ -109,9 +134,9 @@ index 0a2cfe017d7815bf4bfa7ad19721c5b341c50d81..62ab5ee4685943ba60b91ddbda620b60
  	$(REPORT_BUILD)
  	@$(MAKE_DEPS_AUTO_CXX)
  	$(ELOG) $(CCC) $(OUTOPTION)$@ -c $(COMPILE_CXXFLAGS) $(TARGET_LOCAL_INCLUDES) $(_VPATH_SRCS)
-+	echo -e "$(realpath .)/$(notdir $@): $(realpath $(_VPATH_SRCS)) $(realpath .)/Makefile" > $(DEPTH)/.hacky/$(notdir $@).hacky
-+	echo -e "\tcd $(realpath .) && $(CCC) $(subst ",\",$(OUTOPTION))$@ -c $(subst ",\",$(COMPILE_CXXFLAGS)) $(subst ",\",$(TARGET_LOCAL_INCLUDES)) $(subst ",\",$(_VPATH_SRCS))\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
-+	echo -e "all: $(realpath .)/$(notdir $@)\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
++	$(HACKY_ECHO) "$(realpath .)/$(notdir $@): $(realpath $(_VPATH_SRCS)) $(realpath .)/Makefile" > $(DEPTH)/.hacky/$(notdir $@).hacky
++	$(HACKY_ECHO) "\tcd $(realpath .) && $(CCC) $(subst ",\",$(OUTOPTION))$@ -c $(subst ",\",$(COMPILE_CXXFLAGS)) $(subst ",\",$(TARGET_LOCAL_INCLUDES)) $(subst ",\",$(_VPATH_SRCS))\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
++	$(HACKY_ECHO) "all: $(realpath .)/$(notdir $@)\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
 +	$(topsrcdir)/tools/hackymake/abspp.py < $(MDDEPDIR)/$(@F).pp >> $(DEPTH)/.hacky/$(notdir $@).hacky
  
  $(CPPOBJS): %.$(OBJ_SUFFIX): %.cpp $(call mkdir_deps,$(MDDEPDIR))
@@ -119,9 +144,9 @@ index 0a2cfe017d7815bf4bfa7ad19721c5b341c50d81..62ab5ee4685943ba60b91ddbda620b60
  	@$(MAKE_DEPS_AUTO_CXX)
 -	$(ELOG) $(CCC) $(OUTOPTION)$@ -c $(COMPILE_CXXFLAGS) $(TARGET_LOCAL_INCLUDES) $(_VPATH_SRCS)
 +	$(ELOG) $(CCC) $(OUTOPTION)$@ -c $(COMPILE_CXXFLAGS) $(TARGET_LOCAL_INCLUDES) $(_VPATH_SRCS) 
-+	echo -e "$(realpath .)/$(notdir $@): $(realpath $(_VPATH_SRCS)) $(realpath .)/Makefile" > $(DEPTH)/.hacky/$(notdir $@).hacky
-+	echo -e "\tcd $(realpath .) && $(CCC) $(OUTOPTION)$@ -c $(subst ",\",$(COMPILE_CXXFLAGS)) $(subst ",\",$(TARGET_LOCAL_INCLUDES)) $(subst ",\",$(_VPATH_SRCS))\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
-+	echo -e "all: $(realpath .)/$(notdir $@)\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
++	$(HACKY_ECHO) "$(realpath .)/$(notdir $@): $(realpath $(_VPATH_SRCS)) $(realpath .)/Makefile" > $(DEPTH)/.hacky/$(notdir $@).hacky
++	$(HACKY_ECHO) "\tcd $(realpath .) && $(CCC) $(OUTOPTION)$@ -c $(subst ",\",$(COMPILE_CXXFLAGS)) $(subst ",\",$(TARGET_LOCAL_INCLUDES)) $(subst ",\",$(_VPATH_SRCS))\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
++	$(HACKY_ECHO) "all: $(realpath .)/$(notdir $@)\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
 +	$(topsrcdir)/tools/hackymake/abspp.py < $(MDDEPDIR)/$(@F).pp >> $(DEPTH)/.hacky/$(notdir $@).hacky
  
  $(CMMOBJS): $(OBJ_PREFIX)%.$(OBJ_SUFFIX): %.mm $(call mkdir_deps,$(MDDEPDIR))
@@ -159,10 +184,35 @@ index e0a96e4afd5331474ae83dd5115dee8703bfa141..342b28b1e99d3bb1b6481debad4ba06d
  # the js code getting copied into xpinstall and jsd as well as mozilla-bin,
  # and then the static data cells used for locking no longer work.
 diff --git a/js/src/config/rules.mk b/js/src/config/rules.mk
-index 0a2cfe017d7815bf4bfa7ad19721c5b341c50d81..62ab5ee4685943ba60b91ddbda620b6016fda997 100644
+index 0a2cfe017d7815bf4bfa7ad19721c5b341c50d81..f1d3cb1672451588bd82e17af2ea01bddc33e802 100644
 --- a/js/src/config/rules.mk
 +++ b/js/src/config/rules.mk
-@@ -969,21 +969,27 @@ ifdef DTRACE_PROBE_OBJ
+@@ -703,16 +703,24 @@ endif # SUPPRESS_DEFAULT_RULES
+ ifeq ($(filter s,$(MAKEFLAGS)),)
+ ECHO := echo
+ QUIET :=
+ else
+ ECHO := true
+ QUIET := -q
+ endif
+ 
++# On Mac, the system echo is a BSD tool which does not accept the -e
++# argument, but it's implicit there.
++ifeq ($(HOST_OS_ARCH),Darwin)
++HACKY_ECHO := echo
++else
++HACKY_ECHO := echo -e
++endif
++
+ # This function is called and evaluated to produce the rule to build the
+ # specified tier. Each tier begins by building the "static" directories.
+ # The BUILDSTATUS echo commands are used to faciliate easier parsing
+ # of build output. Build drivers are encouraged to filter these lines
+ # from the user.
+ define CREATE_TIER_RULE
+ tier_$(1)::
+ 	@echo "BUILDSTATUS TIER_START $(1)"
+@@ -969,21 +977,27 @@ ifdef DTRACE_PROBE_OBJ
  EXTRA_DEPS += $(DTRACE_PROBE_OBJ)
  OBJS += $(DTRACE_PROBE_OBJ)
  endif
@@ -171,17 +221,17 @@ index 0a2cfe017d7815bf4bfa7ad19721c5b341c50d81..62ab5ee4685943ba60b91ddbda620b60
  	$(RM) $(LIBRARY)
  	$(EXPAND_AR) $(AR_FLAGS) $(OBJS) $(LOBJS) $(SHARED_LIBRARY_LIBS)
  	$(RANLIB) $@
-+	echo -e "$(realpath .)/$(notdir $@): $(realpath $(OBJS)) $(realpath $(LOBJS)) $(EXTRA_DEPS) $(realpath .)/Makefile" > $(DEPTH)/.hacky/$(notdir $@).hacky
-+	echo -e "\tcd $(realpath .) && $(RM) $(LIBRARY) && $(EXPAND_AR) $(AR_FLAGS) $(OBJS) $(LOBJS) $(SHARED_LIBRARY_LIBS) && $(RANLIB) $@" >> $(DEPTH)/.hacky/$(notdir $@).hacky
-+	echo -e "all: $(realpath .)/$(notdir $@)\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
++	$(HACKY_ECHO) "$(realpath .)/$(notdir $@): $(realpath $(OBJS)) $(realpath $(LOBJS)) $(EXTRA_DEPS) $(realpath .)/Makefile" > $(DEPTH)/.hacky/$(notdir $@).hacky
++	$(HACKY_ECHO) "\tcd $(realpath .) && $(RM) $(LIBRARY) && $(EXPAND_AR) $(AR_FLAGS) $(OBJS) $(LOBJS) $(SHARED_LIBRARY_LIBS) && $(RANLIB) $@" >> $(DEPTH)/.hacky/$(notdir $@).hacky
++	$(HACKY_ECHO) "all: $(realpath .)/$(notdir $@)\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
  
  $(filter-out %.$(LIB_SUFFIX),$(LIBRARY)): $(filter %.$(LIB_SUFFIX),$(LIBRARY)) $(OBJS) $(LOBJS) $(EXTRA_DEPS) $(GLOBAL_DEPS)
  # When we only build a library descriptor, blow out any existing library
  	$(if $(filter %.$(LIB_SUFFIX),$(LIBRARY)),,$(RM) $(REAL_LIBRARY) $(EXPORT_LIBRARY:%=%/$(REAL_LIBRARY)))
  	$(EXPAND_LIBS_GEN) -o $@ $(OBJS) $(LOBJS) $(SHARED_LIBRARY_LIBS)
-+	echo -e "$(realpath .)/$(notdir $@): $(realpath $(filter %.$(LIB_SUFFIX),$(LIBRARY)) $(realpath $(OBJS)) $(realpath $(LOBJS)) $(EXTRA_DEPS)) $(realpath .)/Makefile" > $(DEPTH)/.hacky/$(notdir $@).hacky
-+	echo -e "\tcd $(realpath .) && $(if $(filter %.$(LIB_SUFFIX),$(LIBRARY)),,$(RM) $(REAL_LIBRARY) $(EXPORT_LIBRARY:%=%/$(REAL_LIBRARY))) && $(EXPAND_LIBS_GEN) -o $@ $(OBJS) $(LOBJS) $(SHARED_LIBRARY_LIBS) $@" >> $(DEPTH)/.hacky/$(notdir $@).hacky
-+	echo -e "all: $(realpath .)/$(notdir $@)\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
++	$(HACKY_ECHO) "$(realpath .)/$(notdir $@): $(realpath $(filter %.$(LIB_SUFFIX),$(LIBRARY)) $(realpath $(OBJS)) $(realpath $(LOBJS)) $(EXTRA_DEPS)) $(realpath .)/Makefile" > $(DEPTH)/.hacky/$(notdir $@).hacky
++	$(HACKY_ECHO) "\tcd $(realpath .) && $(if $(filter %.$(LIB_SUFFIX),$(LIBRARY)),,$(RM) $(REAL_LIBRARY) $(EXPORT_LIBRARY:%=%/$(REAL_LIBRARY))) && $(EXPAND_LIBS_GEN) -o $@ $(OBJS) $(LOBJS) $(SHARED_LIBRARY_LIBS) $@" >> $(DEPTH)/.hacky/$(notdir $@).hacky
++	$(HACKY_ECHO) "all: $(realpath .)/$(notdir $@)\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
  
  ifeq ($(OS_ARCH),WINNT)
  # Import libraries are created by the rules creating shared libraries.
@@ -190,7 +240,7 @@ index 0a2cfe017d7815bf4bfa7ad19721c5b341c50d81..62ab5ee4685943ba60b91ddbda620b60
  # when rebuilding the corresponding shared library. Defining an empty recipe
  # for import libraries forces make to wait for the shared library recipe to
  # have run before considering other targets that depend on the import library.
-@@ -1027,28 +1033,33 @@ endif
+@@ -1027,28 +1041,33 @@ endif
  
  # On Darwin (Mac OS X), dwarf2 debugging uses debug info left in .o files,
  # so instead of deleting .o files after repacking them into a dylib, we make
@@ -199,10 +249,10 @@ index 0a2cfe017d7815bf4bfa7ad19721c5b341c50d81..62ab5ee4685943ba60b91ddbda620b60
  
  $(SHARED_LIBRARY): $(OBJS) $(LOBJS) $(DEF_FILE) $(RESFILE) $(LIBRARY) $(EXTRA_DEPS) $(GLOBAL_DEPS)
  	$(info $(notdir $@))
-+	echo -e "$(realpath .)/$(notdir $@): $(realpath $(OBJS)) $(realpath $(LOBJS)) $(DEF_FILE) $(LIBRARY) $(EXTRA_DEPS) $(realpath .)/Makefile" > $(DEPTH)/.hacky/$(notdir $@).hacky
++	$(HACKY_ECHO) "$(realpath .)/$(notdir $@): $(realpath $(OBJS)) $(realpath $(LOBJS)) $(DEF_FILE) $(LIBRARY) $(EXTRA_DEPS) $(realpath .)/Makefile" > $(DEPTH)/.hacky/$(notdir $@).hacky
  ifndef INCREMENTAL_LINKER
  	$(RM) $@
-+	echo -e "\tcd $(realpath .) && $(RM) $@" >> $(DEPTH)/.hacky/$(notdir $@).hacky
++	$(HACKY_ECHO) "\tcd $(realpath .) && $(RM) $@" >> $(DEPTH)/.hacky/$(notdir $@).hacky
  endif
  ifdef DTRACE_LIB_DEPENDENT
  ifndef XP_MACOSX
@@ -212,10 +262,10 @@ index 0a2cfe017d7815bf4bfa7ad19721c5b341c50d81..62ab5ee4685943ba60b91ddbda620b60
  	@$(RM) $(DTRACE_PROBE_OBJ)
  else # ! DTRACE_LIB_DEPENDENT
  	$(EXPAND_MKSHLIB) $(SHLIB_LDSTARTFILE) $(OBJS) $(LOBJS) $(SUB_SHLOBJS) $(RESFILE) $(LDFLAGS) $(WRAP_LDFLAGS) $(SHARED_LIBRARY_LIBS) $(EXTRA_DSO_LDOPTS) $(MOZ_GLUE_LDFLAGS) $(OS_LIBS) $(EXTRA_LIBS) $(DEF_FILE) $(SHLIB_LDENDFILE) $(if $(LIB_IS_C_ONLY),,$(STLPORT_LIBS))
-+	echo -e "\tcd $(realpath .) && $(subst ",\",$(EXPAND_MKSHLIB)) $(subst ",\",$(SHLIB_LDSTARTFILE)) $(subst ",\",$(OBJS)) $(subst ",\",$(LOBJS)) $(subst ",\",$(SUB_SHLOBJS)) $(subst ",\",$(RESFILE)) $(subst ",\",$(LDFLAGS)) $(subst ",\",$(WRAP_LDFLAGS)) $(subst ",\",$(SHARED_LIBRARY_LIBS)) $(subst ",\",$(EXTRA_DSO_LDOPTS)) $(subst ",\",$(MOZ_GLUE_LDFLAGS)) $(subst ",\",$(OS_LIBS)) $(subst ",\",$(EXTRA_LIBS)) $(subst ",\",$(DEF_FILE)) $(subst ",\",$(SHLIB_LDENDFILE))\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
++	$(HACKY_ECHO) "\tcd $(realpath .) && $(subst ",\",$(EXPAND_MKSHLIB)) $(subst ",\",$(SHLIB_LDSTARTFILE)) $(subst ",\",$(OBJS)) $(subst ",\",$(LOBJS)) $(subst ",\",$(SUB_SHLOBJS)) $(subst ",\",$(RESFILE)) $(subst ",\",$(LDFLAGS)) $(subst ",\",$(WRAP_LDFLAGS)) $(subst ",\",$(SHARED_LIBRARY_LIBS)) $(subst ",\",$(EXTRA_DSO_LDOPTS)) $(subst ",\",$(MOZ_GLUE_LDFLAGS)) $(subst ",\",$(OS_LIBS)) $(subst ",\",$(EXTRA_LIBS)) $(subst ",\",$(DEF_FILE)) $(subst ",\",$(SHLIB_LDENDFILE))\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
 +	$(topsrcdir)/tools/hackymake/abspp.py < $(MDDEPDIR)/$(@F).pp >> $(DEPTH)/.hacky/$(notdir $@).hacky
  endif # DTRACE_LIB_DEPENDENT
-+	echo -e "\nall: $(realpath .)/$(notdir $@)\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
++	$(HACKY_ECHO) "\nall: $(realpath .)/$(notdir $@)\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
  	@$(call CHECK_STDCXX,$@)
  
  ifeq (_WINNT,$(GNU_CC)_$(OS_ARCH))
@@ -224,7 +274,7 @@ index 0a2cfe017d7815bf4bfa7ad19721c5b341c50d81..62ab5ee4685943ba60b91ddbda620b60
  	@if test -f $@.manifest; then \
  		mt.exe -NOLOGO -MANIFEST $@.manifest -OUTPUTRESOURCE:$@\;$(EMBED_MANIFEST_AT); \
  		rm -f $@.manifest; \
-@@ -1139,21 +1150,29 @@ $(SOBJS): %.$(OBJ_SUFFIX): %.S
+@@ -1139,21 +1158,29 @@ $(SOBJS): %.$(OBJ_SUFFIX): %.S
  
  #
  # Please keep the next two rules in sync.
@@ -233,9 +283,9 @@ index 0a2cfe017d7815bf4bfa7ad19721c5b341c50d81..62ab5ee4685943ba60b91ddbda620b60
  	$(REPORT_BUILD)
  	@$(MAKE_DEPS_AUTO_CXX)
  	$(ELOG) $(CCC) $(OUTOPTION)$@ -c $(COMPILE_CXXFLAGS) $(TARGET_LOCAL_INCLUDES) $(_VPATH_SRCS)
-+	echo -e "$(realpath .)/$(notdir $@): $(realpath $(_VPATH_SRCS)) $(realpath .)/Makefile" > $(DEPTH)/.hacky/$(notdir $@).hacky
-+	echo -e "\tcd $(realpath .) && $(CCC) $(subst ",\",$(OUTOPTION))$@ -c $(subst ",\",$(COMPILE_CXXFLAGS)) $(subst ",\",$(TARGET_LOCAL_INCLUDES)) $(subst ",\",$(_VPATH_SRCS))\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
-+	echo -e "all: $(realpath .)/$(notdir $@)\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
++	$(HACKY_ECHO) "$(realpath .)/$(notdir $@): $(realpath $(_VPATH_SRCS)) $(realpath .)/Makefile" > $(DEPTH)/.hacky/$(notdir $@).hacky
++	$(HACKY_ECHO) "\tcd $(realpath .) && $(CCC) $(subst ",\",$(OUTOPTION))$@ -c $(subst ",\",$(COMPILE_CXXFLAGS)) $(subst ",\",$(TARGET_LOCAL_INCLUDES)) $(subst ",\",$(_VPATH_SRCS))\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
++	$(HACKY_ECHO) "all: $(realpath .)/$(notdir $@)\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
 +	$(topsrcdir)/tools/hackymake/abspp.py < $(MDDEPDIR)/$(@F).pp >> $(DEPTH)/.hacky/$(notdir $@).hacky
  
  $(CPPOBJS): %.$(OBJ_SUFFIX): %.cpp $(call mkdir_deps,$(MDDEPDIR))
@@ -243,9 +293,9 @@ index 0a2cfe017d7815bf4bfa7ad19721c5b341c50d81..62ab5ee4685943ba60b91ddbda620b60
  	@$(MAKE_DEPS_AUTO_CXX)
 -	$(ELOG) $(CCC) $(OUTOPTION)$@ -c $(COMPILE_CXXFLAGS) $(TARGET_LOCAL_INCLUDES) $(_VPATH_SRCS)
 +	$(ELOG) $(CCC) $(OUTOPTION)$@ -c $(COMPILE_CXXFLAGS) $(TARGET_LOCAL_INCLUDES) $(_VPATH_SRCS) 
-+	echo -e "$(realpath .)/$(notdir $@): $(realpath $(_VPATH_SRCS)) $(realpath .)/Makefile" > $(DEPTH)/.hacky/$(notdir $@).hacky
-+	echo -e "\tcd $(realpath .) && $(CCC) $(OUTOPTION)$@ -c $(subst ",\",$(COMPILE_CXXFLAGS)) $(subst ",\",$(TARGET_LOCAL_INCLUDES)) $(subst ",\",$(_VPATH_SRCS))\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
-+	echo -e "all: $(realpath .)/$(notdir $@)\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
++	$(HACKY_ECHO) "$(realpath .)/$(notdir $@): $(realpath $(_VPATH_SRCS)) $(realpath .)/Makefile" > $(DEPTH)/.hacky/$(notdir $@).hacky
++	$(HACKY_ECHO) "\tcd $(realpath .) && $(CCC) $(OUTOPTION)$@ -c $(subst ",\",$(COMPILE_CXXFLAGS)) $(subst ",\",$(TARGET_LOCAL_INCLUDES)) $(subst ",\",$(_VPATH_SRCS))\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
++	$(HACKY_ECHO) "all: $(realpath .)/$(notdir $@)\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
 +	$(topsrcdir)/tools/hackymake/abspp.py < $(MDDEPDIR)/$(@F).pp >> $(DEPTH)/.hacky/$(notdir $@).hacky
  
  $(CMMOBJS): $(OBJ_PREFIX)%.$(OBJ_SUFFIX): %.mm $(call mkdir_deps,$(MDDEPDIR))
