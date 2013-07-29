@@ -1,4 +1,4 @@
-X-Git-Commit-ID: bb654d4e1d12babdf93edc050a20de987084db83
+X-Git-Commit-ID: b8a74fabb8acad28b7dbbc2cb4247780c7cb8c0f
 From: Ehsan Akhgari <ehsan@mozilla.com>
 Subject: hacky.mk
 
@@ -256,7 +256,7 @@ index 0a2cfe017d7815bf4bfa7ad19721c5b341c50d81..62ab5ee4685943ba60b91ddbda620b60
  $(CMOBJS): $(OBJ_PREFIX)%.$(OBJ_SUFFIX): %.m $(call mkdir_deps,$(MDDEPDIR))
  	$(REPORT_BUILD)
 diff --git a/js/src/tools/hackymake/abspp.py b/js/src/tools/hackymake/abspp.py
-new file mode 100644
+new file mode 100755
 index 0000000000000000000000000000000000000000..1df1c0e629de335050b540d57b8597e266cc5c9d
 --- /dev/null
 +++ b/js/src/tools/hackymake/abspp.py
