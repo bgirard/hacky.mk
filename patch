@@ -1,4 +1,4 @@
-X-Git-Commit-ID: 5ee0e8a1269368615bf2360aeb64be48aff5846c
+X-Git-Commit-ID: bb654d4e1d12babdf93edc050a20de987084db83
 From: Ehsan Akhgari <ehsan@mozilla.com>
 Subject: hacky.mk
 
@@ -300,7 +300,7 @@ index 0000000000000000000000000000000000000000..551cfeccef3ae80658057ed30155f71a
 +	make -f Makefile
 +	hash FAILSOHARD!
 diff --git a/tools/hackymake/abspp.py b/tools/hackymake/abspp.py
-new file mode 100644
+new file mode 100755
 index 0000000000000000000000000000000000000000..c7291bfd11c70c8e84781e66f6a69e65048ac766
 --- /dev/null
 +++ b/tools/hackymake/abspp.py
