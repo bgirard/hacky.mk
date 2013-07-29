@@ -123,28 +123,6 @@ diff --git a/config/rules.mk b/config/rules.mk
  
  $(CMOBJS): $(OBJ_PREFIX)%.$(OBJ_SUFFIX): %.m $(call mkdir_deps,$(MDDEPDIR))
  	$(REPORT_BUILD)
-diff --git a/gfx/layers/Layers.cpp b/gfx/layers/Layers.cpp
---- a/gfx/layers/Layers.cpp
-+++ b/gfx/layers/Layers.cpp
-@@ -2,16 +2,18 @@
-  * vim: sw=2 ts=8 et :
-  */
- /* This Source Code Form is subject to the terms of the Mozilla Public
-  * License, v. 2.0. If a copy of the MPL was not distributed with this
-  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
- 
- #include "mozilla/DebugOnly.h"
- 
-+#include "gfxtest.h"
-+
- #include "mozilla/layers/AsyncPanZoomController.h"
- #include "mozilla/layers/PLayerTransaction.h"
- #include "mozilla/layers/LayerManagerComposite.h"
- #include "mozilla/Telemetry.h"
- #include "CompositableHost.h"
- 
- #include "ImageLayers.h"
- #include "ImageContainer.h"
 diff --git a/js/src/Makefile.in b/js/src/Makefile.in
 --- a/js/src/Makefile.in
 +++ b/js/src/Makefile.in
