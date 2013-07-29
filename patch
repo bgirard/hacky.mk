@@ -1,4 +1,11 @@
+X-Git-Commit-ID: 5ee0e8a1269368615bf2360aeb64be48aff5846c
+From: Ehsan Akhgari <ehsan@mozilla.com>
+Subject: hacky.mk
+
+
+
 diff --git a/client.mk b/client.mk
+index 95a0e25137829b9c1026558092a3f43c36f6a65a..13d74fcdf4b45ada3331b249ebabd19a83d77abb 100644
 --- a/client.mk
 +++ b/client.mk
 @@ -307,20 +307,25 @@ ifeq ($(TOPSRCDIR),$(OBJDIR))
@@ -28,9 +35,10 @@ diff --git a/client.mk b/client.mk
  save-mozconfig: $(FOUND_MOZCONFIG)
  	-cp $(FOUND_MOZCONFIG) $(OBJDIR)/.mozconfig
 diff --git a/config/rules.mk b/config/rules.mk
+index 0a2cfe017d7815bf4bfa7ad19721c5b341c50d81..62ab5ee4685943ba60b91ddbda620b6016fda997 100644
 --- a/config/rules.mk
 +++ b/config/rules.mk
-@@ -968,21 +968,27 @@ ifdef DTRACE_PROBE_OBJ
+@@ -969,21 +969,27 @@ ifdef DTRACE_PROBE_OBJ
  EXTRA_DEPS += $(DTRACE_PROBE_OBJ)
  OBJS += $(DTRACE_PROBE_OBJ)
  endif
@@ -58,7 +66,7 @@ diff --git a/config/rules.mk b/config/rules.mk
  # when rebuilding the corresponding shared library. Defining an empty recipe
  # for import libraries forces make to wait for the shared library recipe to
  # have run before considering other targets that depend on the import library.
-@@ -1026,28 +1032,33 @@ endif
+@@ -1027,28 +1033,33 @@ endif
  
  # On Darwin (Mac OS X), dwarf2 debugging uses debug info left in .o files,
  # so instead of deleting .o files after repacking them into a dylib, we make
@@ -92,7 +100,7 @@ diff --git a/config/rules.mk b/config/rules.mk
  	@if test -f $@.manifest; then \
  		mt.exe -NOLOGO -MANIFEST $@.manifest -OUTPUTRESOURCE:$@\;$(EMBED_MANIFEST_AT); \
  		rm -f $@.manifest; \
-@@ -1138,21 +1149,29 @@ endif
+@@ -1139,21 +1150,29 @@ $(SOBJS): %.$(OBJ_SUFFIX): %.S
  
  #
  # Please keep the next two rules in sync.
@@ -124,9 +132,10 @@ diff --git a/config/rules.mk b/config/rules.mk
  $(CMOBJS): $(OBJ_PREFIX)%.$(OBJ_SUFFIX): %.m $(call mkdir_deps,$(MDDEPDIR))
  	$(REPORT_BUILD)
 diff --git a/js/src/Makefile.in b/js/src/Makefile.in
+index e0a96e4afd5331474ae83dd5115dee8703bfa141..342b28b1e99d3bb1b6481debad4ba06dee9998c1 100644
 --- a/js/src/Makefile.in
 +++ b/js/src/Makefile.in
-@@ -14,16 +14,22 @@ run_for_side_effects := $(shell echo "MA
+@@ -14,16 +14,22 @@ run_for_side_effects := $(shell echo "MAKE: $(MAKE)")
  include $(DEPTH)/config/autoconf.mk
  
  ifdef JS_STANDALONE
@@ -150,9 +159,10 @@ diff --git a/js/src/Makefile.in b/js/src/Makefile.in
  # the js code getting copied into xpinstall and jsd as well as mozilla-bin,
  # and then the static data cells used for locking no longer work.
 diff --git a/js/src/config/rules.mk b/js/src/config/rules.mk
+index 0a2cfe017d7815bf4bfa7ad19721c5b341c50d81..62ab5ee4685943ba60b91ddbda620b6016fda997 100644
 --- a/js/src/config/rules.mk
 +++ b/js/src/config/rules.mk
-@@ -968,21 +968,27 @@ ifdef DTRACE_PROBE_OBJ
+@@ -969,21 +969,27 @@ ifdef DTRACE_PROBE_OBJ
  EXTRA_DEPS += $(DTRACE_PROBE_OBJ)
  OBJS += $(DTRACE_PROBE_OBJ)
  endif
@@ -161,7 +171,7 @@ diff --git a/js/src/config/rules.mk b/js/src/config/rules.mk
  	$(RM) $(LIBRARY)
  	$(EXPAND_AR) $(AR_FLAGS) $(OBJS) $(LOBJS) $(SHARED_LIBRARY_LIBS)
  	$(RANLIB) $@
-+	echo -e "$(realpath .)/$(notdir $@): $(realpath $(OBJS)) $(realpath $(LOBJS)) $(EXTRA_DEPS) $(GLOBAL_DEPS) $(realpath .)/Makefile" > $(DEPTH)/.hacky/$(notdir $@).hacky
++	echo -e "$(realpath .)/$(notdir $@): $(realpath $(OBJS)) $(realpath $(LOBJS)) $(EXTRA_DEPS) $(realpath .)/Makefile" > $(DEPTH)/.hacky/$(notdir $@).hacky
 +	echo -e "\tcd $(realpath .) && $(RM) $(LIBRARY) && $(EXPAND_AR) $(AR_FLAGS) $(OBJS) $(LOBJS) $(SHARED_LIBRARY_LIBS) && $(RANLIB) $@" >> $(DEPTH)/.hacky/$(notdir $@).hacky
 +	echo -e "all: $(realpath .)/$(notdir $@)\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
  
@@ -169,7 +179,7 @@ diff --git a/js/src/config/rules.mk b/js/src/config/rules.mk
  # When we only build a library descriptor, blow out any existing library
  	$(if $(filter %.$(LIB_SUFFIX),$(LIBRARY)),,$(RM) $(REAL_LIBRARY) $(EXPORT_LIBRARY:%=%/$(REAL_LIBRARY)))
  	$(EXPAND_LIBS_GEN) -o $@ $(OBJS) $(LOBJS) $(SHARED_LIBRARY_LIBS)
-+	echo -e "$(realpath .)/$(notdir $@): $(realpath $(filter %.$(LIB_SUFFIX),$(LIBRARY)) $(realpath $(OBJS)) $(realpath $(LOBJS)) $(EXTRA_DEPS) $(GLOBAL_DEPS)) $(realpath .)/Makefile" > $(DEPTH)/.hacky/$(notdir $@).hacky
++	echo -e "$(realpath .)/$(notdir $@): $(realpath $(filter %.$(LIB_SUFFIX),$(LIBRARY)) $(realpath $(OBJS)) $(realpath $(LOBJS)) $(EXTRA_DEPS)) $(realpath .)/Makefile" > $(DEPTH)/.hacky/$(notdir $@).hacky
 +	echo -e "\tcd $(realpath .) && $(if $(filter %.$(LIB_SUFFIX),$(LIBRARY)),,$(RM) $(REAL_LIBRARY) $(EXPORT_LIBRARY:%=%/$(REAL_LIBRARY))) && $(EXPAND_LIBS_GEN) -o $@ $(OBJS) $(LOBJS) $(SHARED_LIBRARY_LIBS) $@" >> $(DEPTH)/.hacky/$(notdir $@).hacky
 +	echo -e "all: $(realpath .)/$(notdir $@)\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
  
@@ -180,7 +190,7 @@ diff --git a/js/src/config/rules.mk b/js/src/config/rules.mk
  # when rebuilding the corresponding shared library. Defining an empty recipe
  # for import libraries forces make to wait for the shared library recipe to
  # have run before considering other targets that depend on the import library.
-@@ -1026,28 +1032,33 @@ endif
+@@ -1027,28 +1033,33 @@ endif
  
  # On Darwin (Mac OS X), dwarf2 debugging uses debug info left in .o files,
  # so instead of deleting .o files after repacking them into a dylib, we make
@@ -189,7 +199,7 @@ diff --git a/js/src/config/rules.mk b/js/src/config/rules.mk
  
  $(SHARED_LIBRARY): $(OBJS) $(LOBJS) $(DEF_FILE) $(RESFILE) $(LIBRARY) $(EXTRA_DEPS) $(GLOBAL_DEPS)
  	$(info $(notdir $@))
-+	echo -e "$(realpath .)/$(notdir $@): $(realpath $(OBJS)) $(realpath $(LOBJS)) $(DEF_FILE) $(RESFILE) $(LIBRARY) $(EXTRA_DEPS) $(GLOBAL_DEPS) $(realpath .)/Makefile" > $(DEPTH)/.hacky/$(notdir $@).hacky
++	echo -e "$(realpath .)/$(notdir $@): $(realpath $(OBJS)) $(realpath $(LOBJS)) $(DEF_FILE) $(LIBRARY) $(EXTRA_DEPS) $(realpath .)/Makefile" > $(DEPTH)/.hacky/$(notdir $@).hacky
  ifndef INCREMENTAL_LINKER
  	$(RM) $@
 +	echo -e "\tcd $(realpath .) && $(RM) $@" >> $(DEPTH)/.hacky/$(notdir $@).hacky
@@ -214,7 +224,7 @@ diff --git a/js/src/config/rules.mk b/js/src/config/rules.mk
  	@if test -f $@.manifest; then \
  		mt.exe -NOLOGO -MANIFEST $@.manifest -OUTPUTRESOURCE:$@\;$(EMBED_MANIFEST_AT); \
  		rm -f $@.manifest; \
-@@ -1138,21 +1149,29 @@ endif
+@@ -1139,21 +1150,29 @@ $(SOBJS): %.$(OBJ_SUFFIX): %.S
  
  #
  # Please keep the next two rules in sync.
@@ -247,6 +257,7 @@ diff --git a/js/src/config/rules.mk b/js/src/config/rules.mk
  	$(REPORT_BUILD)
 diff --git a/js/src/tools/hackymake/abspp.py b/js/src/tools/hackymake/abspp.py
 new file mode 100644
+index 0000000000000000000000000000000000000000..1df1c0e629de335050b540d57b8597e266cc5c9d
 --- /dev/null
 +++ b/js/src/tools/hackymake/abspp.py
 @@ -0,0 +1,25 @@
@@ -277,6 +288,7 @@ new file mode 100644
 +
 diff --git a/js/src/tools/hackymake/hacky.mk b/js/src/tools/hackymake/hacky.mk
 new file mode 100644
+index 0000000000000000000000000000000000000000..551cfeccef3ae80658057ed30155f71a58c1285f
 --- /dev/null
 +++ b/js/src/tools/hackymake/hacky.mk
 @@ -0,0 +1,7 @@
@@ -289,6 +301,7 @@ new file mode 100644
 +	hash FAILSOHARD!
 diff --git a/tools/hackymake/abspp.py b/tools/hackymake/abspp.py
 new file mode 100644
+index 0000000000000000000000000000000000000000..c7291bfd11c70c8e84781e66f6a69e65048ac766
 --- /dev/null
 +++ b/tools/hackymake/abspp.py
 @@ -0,0 +1,33 @@
@@ -327,6 +340,7 @@ new file mode 100644
 +
 diff --git a/tools/hackymake/hacky.mk b/tools/hackymake/hacky.mk
 new file mode 100644
+index 0000000000000000000000000000000000000000..551cfeccef3ae80658057ed30155f71a58c1285f
 --- /dev/null
 +++ b/tools/hackymake/hacky.mk
 @@ -0,0 +1,7 @@
