@@ -1,4 +1,4 @@
-X-Git-Commit-ID: 054bb6e0514b5b44f777d2bbe84da9440bb7fbb3
+X-Git-Commit-ID: 364b294b1aa95b7f52ce25fb206083918203d44e
 From: Ehsan Akhgari <ehsan@mozilla.com>
 Subject: hacky.mk
 
@@ -35,7 +35,7 @@ index 95a0e25137829b9c1026558092a3f43c36f6a65a..13d74fcdf4b45ada3331b249ebabd19a
  save-mozconfig: $(FOUND_MOZCONFIG)
  	-cp $(FOUND_MOZCONFIG) $(OBJDIR)/.mozconfig
 diff --git a/config/rules.mk b/config/rules.mk
-index 0a2cfe017d7815bf4bfa7ad19721c5b341c50d81..f1d3cb1672451588bd82e17af2ea01bddc33e802 100644
+index d7aa4efac32032bb5f17d7bae4676163fe67e590..3f8a270d0bf01bef4e500cbc6e8b985371706138 100644
 --- a/config/rules.mk
 +++ b/config/rules.mk
 @@ -703,16 +703,24 @@ endif # SUPPRESS_DEFAULT_RULES
@@ -125,21 +125,13 @@ index 0a2cfe017d7815bf4bfa7ad19721c5b341c50d81..f1d3cb1672451588bd82e17af2ea01bd
  	@if test -f $@.manifest; then \
  		mt.exe -NOLOGO -MANIFEST $@.manifest -OUTPUTRESOURCE:$@\;$(EMBED_MANIFEST_AT); \
  		rm -f $@.manifest; \
-@@ -1139,21 +1158,29 @@ $(SOBJS): %.$(OBJ_SUFFIX): %.S
+@@ -1145,17 +1164,21 @@ $(ASOBJS):
+ endif
  
- #
- # Please keep the next two rules in sync.
- #
- $(CCOBJS): %.$(OBJ_SUFFIX): %.cc $(call mkdir_deps,$(MDDEPDIR))
- 	$(REPORT_BUILD)
- 	@$(MAKE_DEPS_AUTO_CXX)
- 	$(ELOG) $(CCC) $(OUTOPTION)$@ -c $(COMPILE_CXXFLAGS) $(TARGET_LOCAL_INCLUDES) $(_VPATH_SRCS)
-+	$(HACKY_ECHO) "$(realpath .)/$(notdir $@): $(realpath $(_VPATH_SRCS)) $(realpath .)/Makefile" > $(DEPTH)/.hacky/$(notdir $@).hacky
-+	$(HACKY_ECHO) "\tcd $(realpath .) && $(CCC) $(subst ",\",$(OUTOPTION))$@ -c $(subst ",\",$(COMPILE_CXXFLAGS)) $(subst ",\",$(TARGET_LOCAL_INCLUDES)) $(subst ",\",$(_VPATH_SRCS))\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
-+	$(HACKY_ECHO) "all: $(realpath .)/$(notdir $@)\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
-+	$(topsrcdir)/tools/hackymake/abspp.py < $(MDDEPDIR)/$(@F).pp >> $(DEPTH)/.hacky/$(notdir $@).hacky
+ $(SOBJS):
+ 	$(AS) -o $@ $(ASFLAGS) $(LOCAL_INCLUDES) $(TARGET_LOCAL_INCLUDES) -c $<
  
- $(CPPOBJS): %.$(OBJ_SUFFIX): %.cpp $(call mkdir_deps,$(MDDEPDIR))
+ $(CPPOBJS):
  	$(REPORT_BUILD)
  	@$(MAKE_DEPS_AUTO_CXX)
 -	$(ELOG) $(CCC) $(OUTOPTION)$@ -c $(COMPILE_CXXFLAGS) $(TARGET_LOCAL_INCLUDES) $(_VPATH_SRCS)
@@ -149,12 +141,12 @@ index 0a2cfe017d7815bf4bfa7ad19721c5b341c50d81..f1d3cb1672451588bd82e17af2ea01bd
 +	$(HACKY_ECHO) "all: $(realpath .)/$(notdir $@)\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
 +	$(topsrcdir)/tools/hackymake/abspp.py < $(MDDEPDIR)/$(@F).pp >> $(DEPTH)/.hacky/$(notdir $@).hacky
  
- $(CMMOBJS): $(OBJ_PREFIX)%.$(OBJ_SUFFIX): %.mm $(call mkdir_deps,$(MDDEPDIR))
+ $(CMMOBJS):
  	$(REPORT_BUILD)
  	@$(MAKE_DEPS_AUTO_CXX)
  	$(ELOG) $(CCC) -o $@ -c $(COMPILE_CXXFLAGS) $(COMPILE_CMMFLAGS) $(TARGET_LOCAL_INCLUDES) $(_VPATH_SRCS)
  
- $(CMOBJS): $(OBJ_PREFIX)%.$(OBJ_SUFFIX): %.m $(call mkdir_deps,$(MDDEPDIR))
+ $(CMOBJS):
  	$(REPORT_BUILD)
 diff --git a/js/src/Makefile.in b/js/src/Makefile.in
 index e0a96e4afd5331474ae83dd5115dee8703bfa141..342b28b1e99d3bb1b6481debad4ba06dee9998c1 100644
@@ -184,7 +176,7 @@ index e0a96e4afd5331474ae83dd5115dee8703bfa141..342b28b1e99d3bb1b6481debad4ba06d
  # the js code getting copied into xpinstall and jsd as well as mozilla-bin,
  # and then the static data cells used for locking no longer work.
 diff --git a/js/src/config/rules.mk b/js/src/config/rules.mk
-index 0a2cfe017d7815bf4bfa7ad19721c5b341c50d81..f1d3cb1672451588bd82e17af2ea01bddc33e802 100644
+index d7aa4efac32032bb5f17d7bae4676163fe67e590..3f8a270d0bf01bef4e500cbc6e8b985371706138 100644
 --- a/js/src/config/rules.mk
 +++ b/js/src/config/rules.mk
 @@ -703,16 +703,24 @@ endif # SUPPRESS_DEFAULT_RULES
@@ -274,21 +266,13 @@ index 0a2cfe017d7815bf4bfa7ad19721c5b341c50d81..f1d3cb1672451588bd82e17af2ea01bd
  	@if test -f $@.manifest; then \
  		mt.exe -NOLOGO -MANIFEST $@.manifest -OUTPUTRESOURCE:$@\;$(EMBED_MANIFEST_AT); \
  		rm -f $@.manifest; \
-@@ -1139,21 +1158,29 @@ $(SOBJS): %.$(OBJ_SUFFIX): %.S
+@@ -1145,17 +1164,21 @@ $(ASOBJS):
+ endif
  
- #
- # Please keep the next two rules in sync.
- #
- $(CCOBJS): %.$(OBJ_SUFFIX): %.cc $(call mkdir_deps,$(MDDEPDIR))
- 	$(REPORT_BUILD)
- 	@$(MAKE_DEPS_AUTO_CXX)
- 	$(ELOG) $(CCC) $(OUTOPTION)$@ -c $(COMPILE_CXXFLAGS) $(TARGET_LOCAL_INCLUDES) $(_VPATH_SRCS)
-+	$(HACKY_ECHO) "$(realpath .)/$(notdir $@): $(realpath $(_VPATH_SRCS)) $(realpath .)/Makefile" > $(DEPTH)/.hacky/$(notdir $@).hacky
-+	$(HACKY_ECHO) "\tcd $(realpath .) && $(CCC) $(subst ",\",$(OUTOPTION))$@ -c $(subst ",\",$(COMPILE_CXXFLAGS)) $(subst ",\",$(TARGET_LOCAL_INCLUDES)) $(subst ",\",$(_VPATH_SRCS))\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
-+	$(HACKY_ECHO) "all: $(realpath .)/$(notdir $@)\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
-+	$(topsrcdir)/tools/hackymake/abspp.py < $(MDDEPDIR)/$(@F).pp >> $(DEPTH)/.hacky/$(notdir $@).hacky
+ $(SOBJS):
+ 	$(AS) -o $@ $(ASFLAGS) $(LOCAL_INCLUDES) $(TARGET_LOCAL_INCLUDES) -c $<
  
- $(CPPOBJS): %.$(OBJ_SUFFIX): %.cpp $(call mkdir_deps,$(MDDEPDIR))
+ $(CPPOBJS):
  	$(REPORT_BUILD)
  	@$(MAKE_DEPS_AUTO_CXX)
 -	$(ELOG) $(CCC) $(OUTOPTION)$@ -c $(COMPILE_CXXFLAGS) $(TARGET_LOCAL_INCLUDES) $(_VPATH_SRCS)
@@ -298,12 +282,12 @@ index 0a2cfe017d7815bf4bfa7ad19721c5b341c50d81..f1d3cb1672451588bd82e17af2ea01bd
 +	$(HACKY_ECHO) "all: $(realpath .)/$(notdir $@)\n" >> $(DEPTH)/.hacky/$(notdir $@).hacky
 +	$(topsrcdir)/tools/hackymake/abspp.py < $(MDDEPDIR)/$(@F).pp >> $(DEPTH)/.hacky/$(notdir $@).hacky
  
- $(CMMOBJS): $(OBJ_PREFIX)%.$(OBJ_SUFFIX): %.mm $(call mkdir_deps,$(MDDEPDIR))
+ $(CMMOBJS):
  	$(REPORT_BUILD)
  	@$(MAKE_DEPS_AUTO_CXX)
  	$(ELOG) $(CCC) -o $@ -c $(COMPILE_CXXFLAGS) $(COMPILE_CMMFLAGS) $(TARGET_LOCAL_INCLUDES) $(_VPATH_SRCS)
  
- $(CMOBJS): $(OBJ_PREFIX)%.$(OBJ_SUFFIX): %.m $(call mkdir_deps,$(MDDEPDIR))
+ $(CMOBJS):
  	$(REPORT_BUILD)
 diff --git a/js/src/tools/hackymake/abspp.py b/js/src/tools/hackymake/abspp.py
 new file mode 100755
