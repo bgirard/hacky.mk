@@ -1,0 +1,27 @@
+#!/bin/bash
+
+if [ $# != 1 ] ; then
+   echo Usage: $0 path/to/mozilla-central
+   exit 1
+fi
+
+MC="$1"
+
+if [ ! -f "$MC"/config/rules.mk -o ! -f "$MC"/js/src/config/rules.mk ] ; then
+    echo "$MC" does not seem to be a mozilla-central directory
+    exit 1
+fi
+
+set -e
+
+mkdir -p "$MC"/tools
+mkdir -p "$MC"/js/src/tools
+
+cp -r hackymake "$MC"/tools
+cp -r hackymake "$MC"/js/src/tools
+
+patch -d "$MC" --dry-run -s -f -p1 < rules.mk.patch || { echo Test patch failed, no reject generated.  Fix up rules.mk patch. ; exit 1 ; }
+
+patch -d "$MC" -p1 < rules.mk.patch || { echo rules.mk.patch unexpectedly did not apply cleanly ; exit 1 ; }
+patch -d "$MC"/js/src -p1 < rules.mk.patch || { echo rules.mk.patch unexpectedly did not apply cleanly in js/src ; exit 1 ; }
+
