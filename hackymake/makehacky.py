@@ -7,12 +7,14 @@ from tokenize import tokenize, untokenize, NUMBER, STRING, NAME, OP
 
 from abspp import abspp
 
+DEFAULT_HACKY_BACKEND = "ninja"
+
 def depstolist(deps):
     # get absolute path names, but also use unix-style separators
     # even on Windows
     return map(lambda p: os.path.abspath(p).replace("\\", "/"), deps.split())
 
-def openhacky(dotpath, depthstr, target):
+def openhacky(backend, dotpath, depthstr, target):
     # make the toplevel .hacky if it doesn't exist
     hackydir = os.path.abspath(os.path.join(depthstr, ".hacky"))
     if not os.path.exists(hackydir): os.mkdir(hackydir)
@@ -22,13 +24,14 @@ def openhacky(dotpath, depthstr, target):
     treeloc = os.path.relpath(curdir, objdir)
     hackybase = re.sub(r'[/\\]', '_', treeloc)
     
-    hackyfile = file(os.path.join(hackydir, hackybase + "_" + os.path.basename(target) + ".hacky"), "w")
+    ext = "." + backend + ".hacky"
+    hackyfile = file(os.path.join(hackydir, hackybase + "_" + os.path.basename(target) + ext), "w")
     return hackyfile
 
 # This is used for generic rules, everything other than compilation
 # These likely won't have any repeated arguments or anything similar.
-def makehacky(depthstr, dotpath, target, deps, build_command, ppfile = None):
-    hackyfile = openhacky(dotpath, depthstr, target)
+def makehacky(backend, depthstr, dotpath, target, deps, build_command, ppfile = None):
+    hackyfile = openhacky(backend, dotpath, depthstr, target)
 
     print >>hackyfile, "#TARGET:   %s" % (target)
     print >>hackyfile, "#DEPTH:    %s" % (depthstr)
@@ -41,22 +44,31 @@ def makehacky(depthstr, dotpath, target, deps, build_command, ppfile = None):
     targetfile = os.path.basename(target)
     targetdir = os.path.dirname(target)
 
-    print >>hackyfile, "all: %s/%s" % (dotpath, targetfile)
-    print >>hackyfile, "%s/%s: %s/Makefile %s" % (dotpath, targetfile, dotpath, " ".join(depfiles))
-    print >>hackyfile, "\tcd %s && %s" % (dotpath, build_command)
+    if backend == "ninja":
+        print >>hackyfile, "rule rule_%s" % (targetfile)
+        print >>hackyfile, "  command = cd %s && %s" % (dotpath, build_command)
+        print >>hackyfile, ""
+        print >>hackyfile, "build %s/%s: rule_%s | %s" % (dotpath, targetfile, targetfile, " ".join(depfiles))
+        # FIXME warns: ninja: warning: multiple rules generate all.
+        #print >>hackyfile, "build all: phony %s" % (targetfile)
 
-    print >>hackyfile, "original:"
-    print >>hackyfile, "\tcd %s && $(MAKE) %s" % (dotpath, targetfile)
+    elif backend == "make":
+        print >>hackyfile, "all: %s/%s" % (dotpath, targetfile)
+        print >>hackyfile, "%s/%s: %s/Makefile %s" % (dotpath, targetfile, dotpath, " ".join(depfiles))
+        print >>hackyfile, "\tcd %s && %s" % (dotpath, build_command)
 
-    if ppfile:
-        ppdeps = abspp(file(os.path.join(dotpath, ppfile), "r"), dotpath)
-        print >>hackyfile, "%s/%s: %s" % (dotpath, targetfile, " ".join(ppdeps))
+        #print >>hackyfile, "original:"
+        #print >>hackyfile, "\tcd %s && $(MAKE) %s" % (dotpath, targetfile)
+
+        if ppfile:
+            ppdeps = abspp(file(os.path.join(dotpath, ppfile), "r"), dotpath)
+            print >>hackyfile, "%s/%s: %s" % (dotpath, targetfile, " ".join(ppdeps))
 
     hackyfile.close()
 
 # This is used for compilation targets, and gets some extra separated args.
-def makecchacky(depthstr, dotpath, target, sources, compiler, outoption, cflags, local_flags, ppfile):
-    hackyfile = openhacky(dotpath, depthstr, target)
+def makecchacky(backend, depthstr, dotpath, target, sources, compiler, outoption, cflags, local_flags, ppfile):
+    hackyfile = openhacky(backend, dotpath, depthstr, target)
 
     print >>hackyfile, "#CCTARGET: %s" % (target)
     print >>hackyfile, "#DEPTH:    %s" % (depthstr)
@@ -72,16 +84,31 @@ def makecchacky(depthstr, dotpath, target, sources, compiler, outoption, cflags,
     targetfile = os.path.basename(target)
     targetdir = os.path.dirname(target)
 
-    print >>hackyfile, "all: %s/%s" % (dotpath, targetfile)
-    print >>hackyfile, "%s/%s: %s/Makefile %s" % (dotpath, targetfile, dotpath, " ".join(srcfiles))
-    print >>hackyfile, "\tcd %s && %s %s%s -c %s %s %s" % (dotpath, compiler, outoption, targetfile, cflags, local_flags, " ".join(srcfiles))
+    commandStr = "cd %s && %s %s%s -c %s %s %s" % (dotpath, compiler, outoption, targetfile, cflags, local_flags, " ".join(srcfiles))
 
-    print >>hackyfile, "original:"
-    print >>hackyfile, "\tcd %s && $(MAKE) %s" % (dotpath, targetfile)
+    if backend == "ninja":
+        print >>hackyfile, "rule cc_%s" % (targetfile)
 
-    if ppfile:
-        ppdeps = abspp(file(os.path.join(dotpath, ppfile), "r"), dotpath)
-        print >>hackyfile, "%s/%s: %s" % (dotpath, targetfile, " ".join(ppdeps))
+        # For now we use the depfile, however later we can opt into using
+        # ninja deps feature: http://martine.github.io/ninja/manual.html#_deps
+        print >>hackyfile, "  depfile = %s" % (ppfile)
+
+        print >>hackyfile, "  command = %s" % (commandStr)
+        print >>hackyfile, ""
+        print >>hackyfile, "build %s\%s: cc_%s %s | %s/Makefile" % (dotpath, targetfile, targetfile, " ".join(srcfiles), dotpath)
+        # FIXME warns: ninja: warning: multiple rules generate all.
+        #print >>hackyfile, "build all: phony %s" % (targetfile)
+    elif backend == "make":
+        print >>hackyfile, "all: %s/%s" % (dotpath, targetfile)
+        print >>hackyfile, "%s/%s: %s/Makefile %s" % (dotpath, targetfile, dotpath, " ".join(srcfiles))
+        print >>hackyfile, "\t%s" % (commandStr)
+
+        #print >>hackyfile, "original:"
+        #print >>hackyfile, "\tcd %s && $(MAKE) %s" % (dotpath, targetfile)
+
+        if ppfile:
+            ppdeps = abspp(file(os.path.join(dotpath, ppfile), "r"), dotpath)
+            print >>hackyfile, "%s/%s: %s" % (dotpath, targetfile, " ".join(ppdeps))
 
     hackyfile.close()
 
@@ -97,6 +124,6 @@ if __name__ == "__main__":
 
     if args[0] == "cc":
         args.pop(0)
-        makecchacky(*args)
+        makecchacky(DEFAULT_HACKY_BACKEND, *args)
     else:
-        makehacky(*args)
+        makehacky(DEFAULT_HACKY_BACKEND, *args)
