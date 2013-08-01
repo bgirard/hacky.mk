@@ -95,7 +95,7 @@ def makecchacky(backend, depthstr, dotpath, target, sources, compiler, outoption
 
         print >>hackyfile, "  command = %s" % (commandStr)
         print >>hackyfile, ""
-        print >>hackyfile, "build %s\%s: cc_%s %s | %s/Makefile" % (dotpath, targetfile, targetfile, " ".join(srcfiles), dotpath)
+        print >>hackyfile, "build %s/%s: cc_%s %s | %s/Makefile" % (dotpath, targetfile, targetfile, " ".join(srcfiles), dotpath)
         # FIXME warns: ninja: warning: multiple rules generate all.
         #print >>hackyfile, "build all: phony %s" % (targetfile)
     elif backend == "make":
