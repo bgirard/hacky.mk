@@ -7,6 +7,7 @@ endif
 all:
 
 include .hacky/*.hacky
+include .hacky/*.hacky.pp
 
 clobber:
 	$(MAKE) -f Makefile

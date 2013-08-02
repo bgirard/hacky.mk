@@ -1,0 +1,17 @@
+PYTHON = python
+repp = true
+
+rule do_build
+  generator = true
+  description = $out
+  command = ${buildcommand}
+
+rule regen
+  generator = true
+  description = Generating hacky-rules.ninja... edit hacky.ninja to uncomment the include, and rerun.
+  command = bash -c 'cat .hacky/*.ninja > hacky-rules.ninja'
+
+build hacky-rules.ninja: regen
+
+# Uncomment this after running ninja on this script once
+#include hacky-rules.ninja
