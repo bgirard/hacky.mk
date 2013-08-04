@@ -80,7 +80,9 @@ def abspp(ppfile, outfile, targetdir, targetname):
     fpin.close()
     fpout.close()
 
-def relpath(p, root=objroot):
+def relpath(p, root = None):
+    if not root:
+        root = objroot
     return os.path.relpath(p, root).replace("\\", "/")
 
 def depstolist(deps, root=objroot):
@@ -176,6 +178,38 @@ def makepp(depthstr, dotpath, target, ppfile):
     targetfile = os.path.basename(target)
     abspp(ppfile, os.path.join(hackydir, hackyfilename + ".pp"), treeloc, targetfile)
 
+def makeinstall(depthstr, category, source, destdir):
+    # we only care about Windows for now
+    if os.name is not 'nt':
+        return
+
+    # we only care about EXPORT* categories
+    if category.find("EXPORT") != 0:
+        return
+
+    targetfile = os.path.basename(source)
+    computepaths(depthstr, ".", targetfile)
+
+    target = relpath(os.path.join(destdir, targetfile))
+
+    # hack -- redo this since we computed a proper target file now
+    global hackybase, hackyfilename
+    hackybase = re.sub(r'[/\\]', '_', treeloc)
+    hackyfilename = hackybase + "_" + os.path.basename(target) + hacky_ext
+
+    hackyfile = openhacky()
+
+    source = relpath(source)
+
+    if HACKY_BACKEND is "ninja":
+        print >>hackyfile, "build %s: do_install %s" % (target, source)
+
+    if HACKY_BACKEND is "make":
+        print >>hackyfile, "%s: %s" % (target, source)
+        print >>hackyfile, "\tcp -f $< $@"
+
+    hackyfile.close()
+
 if __name__ == "__main__":
     args = sys.argv
 
@@ -190,5 +224,7 @@ if __name__ == "__main__":
         makecchacky(*args[1:])
     elif args[0] == "pp":
         makepp(*args[1:])
+    elif args[0] == "install":
+        makeinstall(*args[1:])
     else:
         makehacky(*args)
