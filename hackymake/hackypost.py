@@ -40,7 +40,7 @@ def readhacky(tree_base):
                         print "Adding target: " + fJson["target"] + " as: " + targetName
     return hackyMap
 
-def genbuild(tree_root, hackyMap, target):
+def gypRoot(tree_root, hackyMap, target):
     import json
     gypRoot = {
         "targets": []
@@ -69,6 +69,121 @@ def gypTargetLibrary(tree_root, hackyMap, target):
     }
     return gypTarget
 
+def genMsvcHeader(msvcProj):
+    msvcProj.appendLine('<?xml version="1.0" encoding="utf-8"?>');
+    msvcProj.appendLineOpen('<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">')
+    msvcProj.appendLineOpen('<ItemGroup Label="ProjectConfigurations">');
+    msvcProj.appendLineOpen('<ProjectConfiguration Include="GeckoImported|Win32">');
+    msvcProj.appendLine('<Configuration>GeckoImported</Configuration>');
+    msvcProj.appendLine('<Platform>Win32</Platform>');
+    msvcProj.appendLineClose('</ProjectConfiguration>');
+    msvcProj.appendLineClose('</ItemGroup>');
+    msvcProj.appendLineOpen('<PropertyGroup Label="Globals">');
+    msvcProj.appendLine('<ProjectGuid>{CDF26D50-0415-4FCF-8498-9FFB7592413A}</ProjectGuid>');
+    msvcProj.appendLine('<RootNamespace>MozillaCentral</RootNamespace>');
+    msvcProj.appendLineClose('</PropertyGroup>');
+
+    msvcProj.appendLine('<Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />');
+    
+    msvcProj.appendLineOpen('<PropertyGroup Condition="\'$(Configuration)|$(Platform)\'==\'GeckoImported|Win32\'" Label="Configuration">');
+    msvcProj.appendLine('<ConfigurationType>DynamicLibrary</ConfigurationType>');
+    msvcProj.appendLine('<UseDebugLibraries>true</UseDebugLibraries>');
+    msvcProj.appendLine('<CharacterSet>Unicode</CharacterSet>');
+    msvcProj.appendLineClose('</PropertyGroup>');
+
+    msvcProj.appendLine('<Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />');
+    
+    msvcProj.appendLine('<PropertyGroup Label="UserMacros" />');
+    msvcProj.appendLineOpen('<PropertyGroup Condition="\'$(Configuration)|$(Platform)\'==\'GeckoImported|Win32\'">');
+    msvcProj.appendLine('<LinkIncremental>true</LinkIncremental>');
+    msvcProj.appendLineClose('</PropertyGroup>');
+
+    msvcProj.appendLineOpen('<ItemGroup>');
+
+    # Use the filters file for olders
+    msvcProj.filtersLine('<?xml version="1.0" encoding="utf-8"?>');
+    msvcProj.filtersLineOpen('<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">');
+    msvcProj.filtersLineOpen('<ItemGroup>');
+
+def genMsvcFooter(msvcProj):
+    msvcProj.appendLineClose('</ItemGroup>');
+    msvcProj.appendLine('<Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />');
+    msvcProj.appendLineOpen('<ImportGroup Label="ExtensionTargets">');
+    msvcProj.appendLineClose('</ImportGroup>');
+    msvcProj.appendLineClose('</Project>');
+    
+    msvcProj.filtersLineClose("</ItemGroup>");
+    msvcProj.generateFolders();
+    msvcProj.filtersLineClose("</Project>");
+
+class MsvcPrinter:
+    msvcOut = []
+    indent = ""
+    filtersOut = []
+    filtersIndent = ""
+    folders = {} # Use a map as a set, values are meaningless
+    def filtersLine(self, line):
+        self.filtersOut.append(self.filtersIndent + line)
+    def filtersLineOpen(self, line):
+        self.filtersLine(line)
+        self.filtersIndent = self.filtersIndent + "  "
+    def filtersLineClose(self, line):
+        self.filtersIndent = self.filtersIndent[:-2]
+        self.filtersLine(line)
+    def appendLine(self, line):
+        self.msvcOut.append(self.indent + line)
+    def appendLineOpen(self, line):
+        self.appendLine(line)
+        self.indent = self.indent + "  "
+    def appendLineClose(self, line):
+        self.indent = self.indent[:-2]
+        self.appendLine(line)
+    def get(self):
+        return "\n".join(self.msvcOut)
+    def generateFolders(self):
+        self.filtersLineOpen('<ItemGroup>')
+        for folder in self.folders:
+            self.filtersLineOpen('<Filter Include="%s">' % folder)
+            self.filtersLineClose('</Filter>')
+        self.filtersLineClose('</ItemGroup>')
+    def getFilters(self):
+        return "\n".join(self.filtersOut)
+
+def genMsvcClCompile(msvcProj, tree_root, hackyMap, target):
+    targetName = target["treeloc"] + "/" + target["srcfiles"][0]
+    preprocessorDef = target["cflags"]
+    folder = target["treeloc"]
+    msvcProj.appendLineOpen('<ClCompile Include="%s">' % targetName.replace("/","\\"));
+    #msvcProj.appendLine('<PreprocessorDefinitions>%s</PreprocessorDefinitions>' % preprocessorDef);
+    #msvcProj.appendLine('');
+    #msvcProj.appendLine('');
+    msvcProj.appendLineClose('</ClCompile>');
+
+    msvcProj.filtersLineOpen('<ClCompile Include="%s">' % targetName.replace("/","\\"));
+    msvcProj.filtersLine('<Filter>%s</Filter>' % folder);
+    msvcProj.folders[folder] = True
+    msvcProj.filtersLineClose('</ClCompile>');
+
+def genMsvcTargetCompile(msvcProj, tree_root, hackyMap, target):
+    objdeps = target["ppDeps"]
+    for objdep in objdeps:
+        if objdep in hackyMap and "srcfiles" in hackyMap[objdep] and hackyMap[objdep]["srcfiles"]:
+            #print hackyMap[objdep]["treeloc"] + "/" + hackyMap[objdep]["srcfiles"][0]
+            genMsvcClCompile(msvcProj, tree_root, hackyMap, hackyMap[objdep])
+        else:
+            print "ERROR: Don't have srcdeps for: " + objdep
+            
+
+def genMsvc(tree_root, hackyMap, target):
+    msvcProj = MsvcPrinter()
+    genMsvcHeader(msvcProj)
+    genMsvcTargetCompile(msvcProj, tree_root, hackyMap, target)
+    genMsvcFooter(msvcProj)
+    msvcfile = open(os.path.join(tree_root, ".hacky", target["target"] + ".vcxproj"), "w")
+    print >>msvcfile, msvcProj.get()
+    filtersfile = open(os.path.join(tree_root, ".hacky", target["target"] + ".vcxproj.filters"), "w")
+    print >>filtersfile, msvcProj.getFilters()
+
 if __name__ == "__main__":
     args = sys.argv
 
@@ -79,4 +194,4 @@ if __name__ == "__main__":
 
     hackyMap = readhacky(tree_base)
 
-    genbuild(tree_base, hackyMap, hackyMap["layout/media/gkmedias.dll"])
+    genMsvc(tree_base, hackyMap, hackyMap["layout/media/gkmedias.dll"])
