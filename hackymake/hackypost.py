@@ -125,11 +125,12 @@ def genMsvcFooter(msvcProj):
     msvcProj.filtersLineClose("</Project>");
 
 class MsvcPrinter:
-    msvcOut = []
-    indent = ""
-    filtersOut = []
-    filtersIndent = ""
-    folders = {} # Use a map as a set, values are meaningless
+    def __init__(self):
+        self.msvcOut = []
+        self.indent = ""
+        self.filtersOut = []
+        self.filtersIndent = ""
+        self.folders = {} # Use a map as a set, values are meaningless
     def filtersLine(self, line):
         self.filtersOut.append(self.filtersIndent + line)
     def filtersLineOpen(self, line):
@@ -203,6 +204,11 @@ def additionalFlags(tree_root, target, cflags):
 
     return " ".join(flags)
 
+def escapeForMsvcXML(str):
+    str = str.replace("<", "&lt;")
+    str = str.replace(">", "&gt;")
+    return str
+
 def genMsvcClCompile(msvcProj, tree_root, hackyMap, target):
 
     srcName = (target["treeloc"] + "/" + target["srcfiles"][0]).replace("/","\\")
@@ -213,19 +219,19 @@ def genMsvcClCompile(msvcProj, tree_root, hackyMap, target):
     flags = additionalFlags(tree_root, target, target["cflags"])
     folder = target["treeloc"]
 
-    msvcProj.appendLineOpen('<ClCompile Include="%s">' % srcName);
-    msvcProj.appendLine('<ObjectFileName>%s</ObjectFileName>' % objName);
-    msvcProj.appendLine('<PreprocessorDefinitions>%s</PreprocessorDefinitions>' % preprocessorDef);
+    msvcProj.appendLineOpen('<ClCompile Include="%s">' % escapeForMsvcXML(srcName));
+    msvcProj.appendLine('<ObjectFileName>%s</ObjectFileName>' % escapeForMsvcXML(objName));
+    msvcProj.appendLine('<PreprocessorDefinitions>%s</PreprocessorDefinitions>' % escapeForMsvcXML(preprocessorDef));
     if includeDirs != "":
-        msvcProj.appendLine('<AdditionalIncludeDirectories>%s;%%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>' % includeDirs);
+        msvcProj.appendLine('<AdditionalIncludeDirectories>%s;%%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>' % escapeForMsvcXML(includeDirs));
     if pdbName != "":
-        msvcProj.appendLine('<ProgramDataBaseFileName>%s</ProgramDataBaseFileName>' % pdbName);
+        msvcProj.appendLine('<ProgramDataBaseFileName>%s</ProgramDataBaseFileName>' % escapeForMsvcXML(pdbName));
     if flags != "":
-        msvcProj.appendLine('<AdditionalOptions>%s %%(AdditionalOptions)</AdditionalOptions>' % flags);
+        msvcProj.appendLine('<AdditionalOptions>%s %%(AdditionalOptions)</AdditionalOptions>' % escapeForMsvcXML(flags));
     msvcProj.appendLineClose('</ClCompile>');
 
-    msvcProj.filtersLineOpen('<ClCompile Include="%s">' % srcName);
-    msvcProj.filtersLine('<Filter>%s</Filter>' % folder);
+    msvcProj.filtersLineOpen('<ClCompile Include="%s">' % escapeForMsvcXML(srcName));
+    msvcProj.filtersLine('<Filter>%s</Filter>' % escapeForMsvcXML(folder));
     msvcProj.folders[folder] = True
     msvcProj.filtersLineClose('</ClCompile>');
 
@@ -236,7 +242,7 @@ def genMsvcTargetCompile(msvcProj, tree_root, hackyMap, target):
             #print hackyMap[objdep]["treeloc"] + "/" + hackyMap[objdep]["srcfiles"][0]
             genMsvcClCompile(msvcProj, tree_root, hackyMap, hackyMap[objdep])
         else:
-            print "ERROR: Don't have srcdeps for: " + objdep
+            pass #print "ERROR: Don't have srcdeps for: " + objdep
             
 
 def genMsvc(tree_root, hackyMap, target):
@@ -260,3 +266,4 @@ if __name__ == "__main__":
     hackyMap = readhacky(tree_base)
 
     genMsvc(tree_base, hackyMap, hackyMap["layout/media/gkmedias.dll"])
+    genMsvc(tree_base, hackyMap, hackyMap["toolkit/library/xul.dll"])
