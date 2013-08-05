@@ -164,7 +164,8 @@ def parseDefines(cflags):
             flag = flag[2:]
             defineParts = flag.split("=",1)
             if len(defineParts) > 1:
-                if defineParts[1].startswith('"') and defineParts[1].endswith('"'):
+                if defineParts[1].startswith('"') and defineParts[1].endswith('"') or \
+                   defineParts[1].startswith("'") and defineParts[1].endswith("'"):
                     defineParts[1] = defineParts[1][1:-1]
                     defineParts[1] = defineParts[1].replace('\\"', '"')
                 defineParts[1].replace('\\"', '"')
