@@ -164,6 +164,12 @@ def parseDefines(cflags):
             defines.append(flag[2:])
     return ";".join(defines)
 
+def parsePdb(tree_root, target, cflags):
+    pdbName = ""
+    for flag in cflags.split(" "):
+        if flag.startswith("-Fd"):
+            pdbName = os.path.join(tree_root, target['treeloc'], flag[3:]).replace("/","\\")
+    return pdbName
 
 def additionalInclude(tree_root, target, cflags):
     includes = []
@@ -177,7 +183,7 @@ def additionalFlags(tree_root, target, cflags):
     flags = []
     fixPathForNextFlag = False
     for flag in cflags.split(" "):
-        if flag.startswith("-D") or flag.startswith("-I") or flag == "":
+        if flag.startswith("-D") or flag.startswith("-I") or flag == "" or flag.startswith("-Fd"):
             continue
         if fixPathForNextFlag:
             fixPathForNextFlag = False
@@ -189,21 +195,27 @@ def additionalFlags(tree_root, target, cflags):
     return " ".join(flags)
 
 def genMsvcClCompile(msvcProj, tree_root, hackyMap, target):
-    targetName = target["treeloc"] + "/" + target["srcfiles"][0]
+
+    srcName = (target["treeloc"] + "/" + target["srcfiles"][0]).replace("/","\\")
+    objName = (target["treeloc"] + "/" + target["targetfile"]).replace("/","\\")
     preprocessorDef = parseDefines(target["cflags"])
+    pdbName = parsePdb(tree_root, target, target["cflags"])
     includeDirs = additionalInclude(tree_root, target, target["cflags"])
     flags = additionalFlags(tree_root, target, target["cflags"])
     folder = target["treeloc"]
-    msvcProj.appendLineOpen('<ClCompile Include="%s">' % targetName.replace("/","\\"));
+
+    msvcProj.appendLineOpen('<ClCompile Include="%s">' % srcName);
+    msvcProj.appendLine('<ObjectFileName>%s</ObjectFileName>' % objName);
     msvcProj.appendLine('<PreprocessorDefinitions>%s</PreprocessorDefinitions>' % preprocessorDef);
     if includeDirs != "":
         msvcProj.appendLine('<AdditionalIncludeDirectories>%s;%%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>' % includeDirs);
+    if pdbName != "":
+        msvcProj.appendLine('<ProgramDataBaseFileName>%s</ProgramDataBaseFileName>' % pdbName);
     if flags != "":
         msvcProj.appendLine('<AdditionalOptions>%s %%(AdditionalOptions)</AdditionalOptions>' % flags);
-    #msvcProj.appendLine('');
     msvcProj.appendLineClose('</ClCompile>');
 
-    msvcProj.filtersLineOpen('<ClCompile Include="%s">' % targetName.replace("/","\\"));
+    msvcProj.filtersLineOpen('<ClCompile Include="%s">' % srcName);
     msvcProj.filtersLine('<Filter>%s</Filter>' % folder);
     msvcProj.folders[folder] = True
     msvcProj.filtersLineClose('</ClCompile>');
