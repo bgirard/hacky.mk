@@ -87,7 +87,7 @@ def genMsvcHeader(msvcProj):
     
     msvcProj.appendLineOpen('<PropertyGroup Condition="\'$(Configuration)|$(Platform)\'==\'GeckoImported|Win32\'" Label="Configuration">');
     msvcProj.appendLine('<ConfigurationType>DynamicLibrary</ConfigurationType>');
-    msvcProj.appendLine('<UseDebugLibraries>true</UseDebugLibraries>');
+    #msvcProj.appendLine('<UseDebugLibraries>true</UseDebugLibraries>');
     msvcProj.appendLine('<CharacterSet>Unicode</CharacterSet>');
     msvcProj.appendLineClose('</PropertyGroup>');
 
@@ -97,6 +97,13 @@ def genMsvcHeader(msvcProj):
     msvcProj.appendLineOpen('<PropertyGroup Condition="\'$(Configuration)|$(Platform)\'==\'GeckoImported|Win32\'">');
     msvcProj.appendLine('<LinkIncremental>true</LinkIncremental>');
     msvcProj.appendLineClose('</PropertyGroup>');
+
+    # Here we can either build with optimation or debug and continue but not both
+    msvcProj.appendLineOpen('<ItemDefinitionGroup Condition="\'$(Configuration)|$(Platform)\'==\'GeckoImported|Win32\'">');
+    msvcProj.appendLineOpen('<ClCompile>')
+    msvcProj.appendLine('<Optimization>MinSpace</Optimization>');
+    msvcProj.appendLineClose('</ClCompile>')
+    msvcProj.appendLineClose('</ItemDefinitionGroup>')
 
     msvcProj.appendLineOpen('<ItemGroup>');
 
@@ -149,13 +156,20 @@ class MsvcPrinter:
     def getFilters(self):
         return "\n".join(self.filtersOut)
 
+def parseDefines(cflags):
+    defines = []
+    for flag in cflags.split(" "):
+        if flag.startswith("-D"):
+            defines.append(flag)
+    return " ".join(defines)
+
 def genMsvcClCompile(msvcProj, tree_root, hackyMap, target):
     targetName = target["treeloc"] + "/" + target["srcfiles"][0]
-    preprocessorDef = target["cflags"]
+    preprocessorDef = parseDefines(target["cflags"])
     folder = target["treeloc"]
     msvcProj.appendLineOpen('<ClCompile Include="%s">' % targetName.replace("/","\\"));
-    #msvcProj.appendLine('<PreprocessorDefinitions>%s</PreprocessorDefinitions>' % preprocessorDef);
-    #msvcProj.appendLine('');
+    msvcProj.appendLine('<PreprocessorDefinitions>%s</PreprocessorDefinitions>' % preprocessorDef);
+    msvcProj.appendLine('<AdditionalOptions>%s %%(AdditionalOptions)</AdditionalOptions>' % preprocessorDef);
     #msvcProj.appendLine('');
     msvcProj.appendLineClose('</ClCompile>');
 
@@ -179,9 +193,9 @@ def genMsvc(tree_root, hackyMap, target):
     genMsvcHeader(msvcProj)
     genMsvcTargetCompile(msvcProj, tree_root, hackyMap, target)
     genMsvcFooter(msvcProj)
-    msvcfile = open(os.path.join(tree_root, ".hacky", target["target"] + ".vcxproj"), "w")
+    msvcfile = open(os.path.join(tree_root, target["target"] + ".vcxproj"), "w")
     print >>msvcfile, msvcProj.get()
-    filtersfile = open(os.path.join(tree_root, ".hacky", target["target"] + ".vcxproj.filters"), "w")
+    filtersfile = open(os.path.join(tree_root, target["target"] + ".vcxproj.filters"), "w")
     print >>filtersfile, msvcProj.getFilters()
 
 if __name__ == "__main__":
