@@ -132,7 +132,6 @@ def emit_common(hackyfile, treeloc, target, depfiles, srcfiles, build_command, d
         import json
         json_data = {
             "type": "emit_common",
-            "hackyfile" : hackyfile,
 	    "treeloc": treeloc,
             "target": target,
 	    "depfiles": depfiles,
