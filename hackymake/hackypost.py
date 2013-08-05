@@ -161,7 +161,15 @@ def parseDefines(cflags):
     defines = []
     for flag in cflags.split(" "):
         if flag.startswith("-D"):
-            defines.append(flag[2:])
+            flag = flag[2:]
+            defineParts = flag.split("=",1)
+            if len(defineParts) > 1:
+                if defineParts[1].startswith('"') and defineParts[1].endswith('"'):
+                    defineParts[1] = defineParts[1][1:-1]
+                    defineParts[1] = defineParts[1].replace('\\"', '"')
+                defineParts[1].replace('\\"', '"')
+                flag = defineParts[0] + "=" + defineParts[1]
+            defines.append(flag)
     return ";".join(defines)
 
 def parsePdb(tree_root, target, cflags):
