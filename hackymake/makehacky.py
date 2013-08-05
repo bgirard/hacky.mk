@@ -8,19 +8,11 @@ from tokenize import tokenize, untokenize, NUMBER, STRING, NAME, OP
 DEBUG = False
 HACKY_BACKEND = os.getenv("HACKY_BACKEND") or "ninja"
 
-if not HACKY_BACKEND in ('ninja', 'make'):
-    print >>sys.stderr, "HACKY_BACKEND must be ninja or make"
-    sys.exit(1)
-
 #
 # Note: We use Unix style path separators everywhere, and normalize DOS ones
 # to Unix style.
 #
 
-elif HACKY_BACKEND is "ninja":
-    hacky_ext = ".ninja"
-else: # default Make
-    hacky_ext = ".hacky"
 
 makehackypy = None
 objroot = None
@@ -28,6 +20,18 @@ hackydir = None
 treeloc = None
 hackybase = None
 hackyfilename = None
+
+def gethackyext():
+    global backend
+    if backend == "ninja":
+        return ".ninja"
+    elif backend == "hacky":
+        return ".hacky"
+    elif backend == "make":
+        return ".mk"
+    else: # default Make
+        print >>sys.stderr, ("Unkown backend: '%'" % backend)
+        sys.exit(1)
 
 def computepaths(depthstr, dotpath, target):
     global makehackypy, objroot, hackydir, treeloc, hackybase, hackyfilename
@@ -37,7 +41,7 @@ def computepaths(depthstr, dotpath, target):
     # figure out the path relative to the objroot (maybe abspath dotpath?)
     treeloc = os.path.relpath(dotpath, objroot).replace("\\", "/")
     hackybase = re.sub(r'[/\\]', '_', treeloc)
-    hackyfilename = hackybase + "_" + os.path.basename(target) + hacky_ext
+    hackyfilename = hackybase + "_" + os.path.basename(target) + gethackyext()
 
     # and fix up makehackypy
     makehackypy = os.path.relpath(makehackypy, dotpath).replace("\\", "/")
@@ -91,16 +95,19 @@ def depstolist(deps, root=objroot):
     return map(lambda p: relpath(p, root).replace("\\", "/"), deps.split())
 
 def openhacky():
+    global hackyfilename
     # make the toplevel .hacky if it doesn't exist
     if not os.path.exists(hackydir): os.mkdir(hackydir)
 
     hackyfile = file(os.path.join(hackydir, hackyfilename), "w")
+    #print >>sys.stderr, ("Open '%s'" % os.path.join(hackydir, hackyfilename))
     return hackyfile
 
 def emit_common(hackyfile, treeloc, target, depfiles, srcfiles, build_command, depthstr, dotpath, ppfile = None):
+    global backend
     targetfile = os.path.basename(target)
 
-    if HACKY_BACKEND is "ninja":
+    if backend == "ninja":
         print >>hackyfile, "build %s/%s: do_build | %s" % (treeloc, targetfile, " ".join(depfiles))
         # escape out the build_command
         build_command = build_command.replace("\\", "\\\\").replace("\"","\\\"")
@@ -109,7 +116,7 @@ def emit_common(hackyfile, treeloc, target, depfiles, srcfiles, build_command, d
             build_command = build_command + " && ${PYTHON} %s pp %s %s %s %s" % (makehackypy, depthstr, dotpath, target, ppfile)
         print >>hackyfile, "  buildcommand = bash -c \"cd %s && %s\"" % (treeloc, build_command)
 
-    if HACKY_BACKEND is "make":
+    if backend == "make":
         print >>hackyfile, "all: %s/%s" % (treeloc, targetfile)
         print >>hackyfile, "%s/%s: %s" % (treeloc, targetfile, " ".join(depfiles))
         print >>hackyfile, "\tcd %s && %s" % (treeloc, build_command)
@@ -120,6 +127,22 @@ def emit_common(hackyfile, treeloc, target, depfiles, srcfiles, build_command, d
         print >>hackyfile, "\tcd %s && rm -f %s && $(MAKE) %s" % (treeloc, targetfile, targetfile)
         print >>hackyfile, "%s: %s/Makefile" % (os.path.join(hackydir, hackyfilename), treeloc)
         print >>hackyfile, "\tcd %s && $(MAKE) %s" % (treeloc, targetfile)
+
+    if backend == "hacky":
+        import json
+        json_data = {
+            "type": "emit_common",
+            "hackyfile" : hackyfile,
+	    "treeloc": treeloc,
+            "target": target,
+	    "depfiles": depfiles,
+	    "srcfiles": srcfiles,
+	    "build_command": build_command,
+	    "depthstr": depthstr,
+	    "dotpath": dotpath,
+	    "ppfile": ppfile,
+	}
+	print >>hackyfile, json.dumps(json_data)
 
     # if a ppfile is given, process it
     # NOTE: we don't ever include this pp file; it gets included in the toplevel hacky.mk!
@@ -179,6 +202,7 @@ def makepp(depthstr, dotpath, target, ppfile):
     abspp(ppfile, os.path.join(hackydir, hackyfilename + ".pp"), treeloc, targetfile)
 
 def makeinstall(depthstr, category, source, destdir):
+    global backend
     # we only care about Windows for now
     if os.name is not 'nt':
         return
@@ -195,22 +219,36 @@ def makeinstall(depthstr, category, source, destdir):
     # hack -- redo this since we computed a proper target file now
     global hackybase, hackyfilename
     hackybase = re.sub(r'[/\\]', '_', treeloc)
-    hackyfilename = hackybase + "_" + os.path.basename(target) + hacky_ext
+    hackyfilename = hackybase + "_" + os.path.basename(target) + gethackyext()
 
     hackyfile = openhacky()
 
     source = relpath(source)
 
-    if HACKY_BACKEND is "ninja":
+    if backend == "ninja":
         print >>hackyfile, "build %s: do_install %s" % (target, source)
 
-    if HACKY_BACKEND is "make":
+    if backend == "make":
         print >>hackyfile, "%s: %s" % (target, source)
         print >>hackyfile, "\tcp -f $< $@"
+
+    if backend == "hacky":
+        import json
+        json_data = {
+            "type": "makeinstall",
+	    "depthstr": depthstr,
+            "category": category,
+            "source": source,
+            "destdir": destdir,
+	}
+	print >>hackyfile, json.dumps(json_data)
 
     hackyfile.close()
 
 if __name__ == "__main__":
+    global backend
+    backend = None
+
     args = sys.argv
 
     # save script name
@@ -220,11 +258,24 @@ if __name__ == "__main__":
     # if someone's already escaping " via \"
     args = map(lambda s: s.replace('^^', '"'), args)
 
-    if args[0] == "cc":
-        makecchacky(*args[1:])
-    elif args[0] == "pp":
-        makepp(*args[1:])
-    elif args[0] == "install":
-        makeinstall(*args[1:])
-    else:
-        makehacky(*args)
+    backendsStr = os.getenv("HACKY_BACKEND") or "all"
+    if backendsStr is "all":
+        backendsStr = "ninja,hacky,make"
+
+    backends = backendsStr.split(",")
+
+    for currBackend in backends:
+        backend = currBackend.strip()
+        #print >>sys.stderr, ("Generating: backend '%s'" % backend)
+        if not backend in ('ninja', 'hacky', 'make'):
+            print >>sys.stderr, ("HACKY_BACKEND must be ninja, hacky or make but is '%s'" % backend)
+            sys.exit(1)
+
+        if args[0] == "cc":
+            makecchacky(*args[1:])
+        elif args[0] == "pp":
+            makepp(*args[1:])
+        elif args[0] == "install":
+            makeinstall(*args[1:])
+        else:
+            makehacky(*args)
