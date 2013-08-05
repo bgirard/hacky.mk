@@ -13,6 +13,7 @@ def readpp(ppfile):
         if ppWord.endswith(":"):
             continue;
         deps.append(ppWord)
+    deps.sort()
     return deps
 
 # Returns a hackyMap which maps
@@ -29,12 +30,14 @@ def readhacky(tree_base):
             hacky_path = os.path.join(hackydir, f)
             fJson = json.loads(open(hacky_path, "r").read())
             if "target" in fJson:
-                hackyMap[fJson["target"]] = fJson
+                # os.join will add \ instead of / on windows
+                targetName = fJson["treeloc"] + "/" + fJson["target"]
+                hackyMap[targetName] = fJson
                 ppPath = hacky_path + ".pp"
                 if os.path.isfile(ppPath):
                     fJson['ppDeps'] = readpp(ppPath)
                     if DEBUG and fJson["target"].endswith(".dll"):
-                        print "Adding target: " + fJson["target"]
+                        print "Adding target: " + fJson["target"] + " as: " + targetName
     return hackyMap
 
 def genbuild(tree_root, hackyMap, target):
@@ -48,11 +51,21 @@ def genbuild(tree_root, hackyMap, target):
     # Pretty print gypRoot
     print >>gypfile, json.dumps(gypRoot, sort_keys=True, indent=4, separators=(',', ': '))
 
+def objdeps_to_srcdeps(objdeps, hackyMap):
+    srcdeps = []
+    for objdep in objdeps:
+        objdep = objdep
+        if objdep in hackyMap and "srcfiles" in hackyMap[objdep]:
+            srcdeps.append(hackyMap[objdep]["srcfiles"])
+        else:
+            print "ERROR: Don't have srcdeps for: " + objdep
+    return srcdeps
+
 def gypTargetLibrary(tree_root, hackyMap, target):
     gypTarget = {
         "target_name": target["target"],
         "type": "shared_library",
-        "sources": target["ppDeps"],
+        "sources": objdeps_to_srcdeps(target["ppDeps"], hackyMap),
     }
     return gypTarget
 
@@ -66,4 +79,4 @@ if __name__ == "__main__":
 
     hackyMap = readhacky(tree_base)
 
-    genbuild(tree_base, hackyMap, hackyMap["gkmedias.dll"])
+    genbuild(tree_base, hackyMap, hackyMap["layout/media/gkmedias.dll"])
