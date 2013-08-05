@@ -103,7 +103,7 @@ def openhacky():
     #print >>sys.stderr, ("Open '%s'" % os.path.join(hackydir, hackyfilename))
     return hackyfile
 
-def emit_common(hackyfile, treeloc, target, depfiles, srcfiles, build_command, depthstr, dotpath, ppfile = None):
+def emit_common(hackyfile, treeloc, target, depfiles, srcfiles, build_command, depthstr, dotpath, ppfile = None, extra_info = []):
     global backend
     targetfile = os.path.basename(target)
 
@@ -132,16 +132,18 @@ def emit_common(hackyfile, treeloc, target, depfiles, srcfiles, build_command, d
         import json
         json_data = {
             "type": "emit_common",
-	    "treeloc": treeloc,
+            "treeloc": treeloc,
             "target": target,
-	    "depfiles": depfiles,
-	    "srcfiles": srcfiles,
-	    "build_command": build_command,
-	    "depthstr": depthstr,
-	    "dotpath": dotpath,
-	    "ppfile": ppfile,
-	}
-	print >>hackyfile, json.dumps(json_data)
+            "depfiles": depfiles,
+            "srcfiles": srcfiles,
+            "build_command": build_command,
+            "depthstr": depthstr,
+            "dotpath": dotpath,
+            "ppfile": ppfile,
+        }
+        for key in extra_info:
+           json_data[key] = extra_info[key]
+        print >>hackyfile, json.dumps(json_data)
 
     # if a ppfile is given, process it
     # NOTE: we don't ever include this pp file; it gets included in the toplevel hacky.mk!
@@ -154,7 +156,7 @@ def makehacky(depthstr, dotpath, target, deps, build_command, ppfile = None):
     computepaths(depthstr, dotpath, target)
     hackyfile = openhacky()
 
-    if DEBUG:
+    if DEBUG and not backend == "hacky":
         print >>hackyfile, "#TARGET:   %s" % (target)
         print >>hackyfile, "#DEPTH:    %s" % (depthstr)
         print >>hackyfile, "#DOTPATH:  %s" % (dotpath)
@@ -174,7 +176,7 @@ def makecchacky(depthstr, dotpath, target, sources, compiler, outoption, cflags,
     computepaths(depthstr, dotpath, target)
     hackyfile = openhacky()
 
-    if DEBUG:
+    if DEBUG and not backend == "hacky":
         print >>hackyfile, "#CCTARGET: %s" % (target)
         print >>hackyfile, "#DEPTH:    %s" % (depthstr)
         print >>hackyfile, "#DOTPATH:  %s" % (dotpath)
@@ -191,7 +193,16 @@ def makecchacky(depthstr, dotpath, target, sources, compiler, outoption, cflags,
 
     build_command = "%s %s%s -c %s %s %s" % (compiler, outoption, targetfile, cflags, local_flags, " ".join(srcfiles))
 
-    emit_common(hackyfile, treeloc, target, depfiles, srcfiles, build_command, depthstr, dotpath, ppfile)
+    extra_info = {
+        "compiler": compiler,
+        "outoption": outoption,
+        "targetfile": targetfile,
+        "cflags": cflags,
+        "local_flags": local_flags,
+        "srcfiles": srcfiles,
+    }
+
+    emit_common(hackyfile, treeloc, target, depfiles, srcfiles, build_command, depthstr, dotpath, ppfile, extra_info=extra_info)
 
     hackyfile.close()
 
@@ -235,12 +246,12 @@ def makeinstall(depthstr, category, source, destdir):
         import json
         json_data = {
             "type": "makeinstall",
-	    "depthstr": depthstr,
+            "depthstr": depthstr,
             "category": category,
             "source": source,
             "destdir": destdir,
-	}
-	print >>hackyfile, json.dumps(json_data)
+        }
+        print >>hackyfile, json.dumps(json_data)
 
     hackyfile.close()
 
