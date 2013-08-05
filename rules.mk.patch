@@ -1,5 +1,5 @@
 diff --git a/config/rules.mk b/config/rules.mk
-index d7aa4ef..2632193 100644
+index d7aa4ef..771423b 100644
 --- a/config/rules.mk
 +++ b/config/rules.mk
 @@ -970,15 +970,27 @@ EXTRA_DEPS += $(DTRACE_PROBE_OBJ)
@@ -31,7 +31,7 @@ index d7aa4ef..2632193 100644
 +		"$(realpath .)" \
 +		"$@" \
 +		"$(filter %.$(LIB_SUFFIX),$(LIBRARY)) $(OBJS) $(EXTRA_DEPS)" \
-+		"$(if $(filter %.$(LIB_SUFFIX),$(LIBRARY)),true,$(RM) $(REAL_LIBRARY) $(EXPORT_LIBRARY:%=%/$(REAL_LIBRARY))) && $(EXPAND_LIBS_GEN) -o $@ $(OBJS) $(SHARED_LIBRARY_LIBS) $@"
++		"$(if $(filter %.$(LIB_SUFFIX),$(LIBRARY)),true,$(RM) $(REAL_LIBRARY) $(EXPORT_LIBRARY:%=%/$(REAL_LIBRARY))) && $(EXPAND_LIBS_GEN) -o $@ $(OBJS) $(SHARED_LIBRARY_LIBS)"
  
  ifeq ($(OS_ARCH),WINNT)
  # Import libraries are created by the rules creating shared libraries.
@@ -159,7 +159,7 @@ index d7aa4ef..2632193 100644
  )
  
 diff --git a/js/src/config/rules.mk b/js/src/config/rules.mk
-index d7aa4ef..2632193 100644
+index d7aa4ef..771423b 100644
 --- a/js/src/config/rules.mk
 +++ b/js/src/config/rules.mk
 @@ -970,15 +970,27 @@ EXTRA_DEPS += $(DTRACE_PROBE_OBJ)
@@ -191,7 +191,7 @@ index d7aa4ef..2632193 100644
 +		"$(realpath .)" \
 +		"$@" \
 +		"$(filter %.$(LIB_SUFFIX),$(LIBRARY)) $(OBJS) $(EXTRA_DEPS)" \
-+		"$(if $(filter %.$(LIB_SUFFIX),$(LIBRARY)),true,$(RM) $(REAL_LIBRARY) $(EXPORT_LIBRARY:%=%/$(REAL_LIBRARY))) && $(EXPAND_LIBS_GEN) -o $@ $(OBJS) $(SHARED_LIBRARY_LIBS) $@"
++		"$(if $(filter %.$(LIB_SUFFIX),$(LIBRARY)),true,$(RM) $(REAL_LIBRARY) $(EXPORT_LIBRARY:%=%/$(REAL_LIBRARY))) && $(EXPAND_LIBS_GEN) -o $@ $(OBJS) $(SHARED_LIBRARY_LIBS)"
  
  ifeq ($(OS_ARCH),WINNT)
  # Import libraries are created by the rules creating shared libraries.
