@@ -102,6 +102,7 @@ def genMsvcHeader(msvcProj):
     msvcProj.appendLineOpen('<ItemDefinitionGroup Condition="\'$(Configuration)|$(Platform)\'==\'GeckoImported|Win32\'">');
     msvcProj.appendLineOpen('<ClCompile>')
     msvcProj.appendLine('<Optimization>MinSpace</Optimization>');
+    msvcProj.appendLine('<ExceptionHandling>false</ExceptionHandling>');
     msvcProj.appendLineClose('</ClCompile>')
     msvcProj.appendLineClose('</ItemDefinitionGroup>')
 
@@ -160,16 +161,45 @@ def parseDefines(cflags):
     defines = []
     for flag in cflags.split(" "):
         if flag.startswith("-D"):
-            defines.append(flag)
-    return " ".join(defines)
+            defines.append(flag[2:])
+    return ";".join(defines)
+
+
+def additionalInclude(tree_root, target, cflags):
+    includes = []
+    for flag in cflags.split(" "):
+        if flag.startswith("-I"):
+            includeDir = flag[2:]
+            includes.append(os.path.join(tree_root, target['treeloc'], includeDir).replace("/","\\"))
+    return ";".join(includes)
+
+def additionalFlags(tree_root, target, cflags):
+    flags = []
+    fixPathForNextFlag = False
+    for flag in cflags.split(" "):
+        if flag.startswith("-D") or flag.startswith("-I") or flag == "":
+            continue
+        if fixPathForNextFlag:
+            fixPathForNextFlag = False
+            flag = os.path.join(tree_root, target['treeloc'], flag).replace("/","\\")
+        if flag == "-FI":
+            fixPathForNextFlag = True
+        flags.append(flag)
+
+    return " ".join(flags)
 
 def genMsvcClCompile(msvcProj, tree_root, hackyMap, target):
     targetName = target["treeloc"] + "/" + target["srcfiles"][0]
     preprocessorDef = parseDefines(target["cflags"])
+    includeDirs = additionalInclude(tree_root, target, target["cflags"])
+    flags = additionalFlags(tree_root, target, target["cflags"])
     folder = target["treeloc"]
     msvcProj.appendLineOpen('<ClCompile Include="%s">' % targetName.replace("/","\\"));
     msvcProj.appendLine('<PreprocessorDefinitions>%s</PreprocessorDefinitions>' % preprocessorDef);
-    msvcProj.appendLine('<AdditionalOptions>%s %%(AdditionalOptions)</AdditionalOptions>' % preprocessorDef);
+    if includeDirs != "":
+        msvcProj.appendLine('<AdditionalIncludeDirectories>%s;%%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>' % includeDirs);
+    if flags != "":
+        msvcProj.appendLine('<AdditionalOptions>%s %%(AdditionalOptions)</AdditionalOptions>' % flags);
     #msvcProj.appendLine('');
     msvcProj.appendLineClose('</ClCompile>');
 
