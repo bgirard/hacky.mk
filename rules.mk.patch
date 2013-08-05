@@ -1,5 +1,5 @@
 diff --git a/config/rules.mk b/config/rules.mk
-index d7aa4ef..ef09c0f 100644
+index d7aa4ef..2632193 100644
 --- a/config/rules.mk
 +++ b/config/rules.mk
 @@ -970,15 +970,27 @@ EXTRA_DEPS += $(DTRACE_PROBE_OBJ)
@@ -15,7 +15,7 @@ index d7aa4ef..ef09c0f 100644
 -
 -$(filter-out %.$(LIB_SUFFIX),$(LIBRARY)): $(filter %.$(LIB_SUFFIX),$(LIBRARY)) $(OBJS) $(LOBJS) $(EXTRA_DEPS) $(GLOBAL_DEPS)
 +	@$(PYTHON) $(topsrcdir)/tools/hackymake/makehacky.py \
-+		"$(DEPTH)" \
++		"$(if $(TOP_DIST),$(TOP_DIST)/..,$(DEPTH))" \
 +		"$(realpath .)" \
 +		"$@" \
 +		"$(OBJS) $(EXTRA_DEPS)" \
@@ -27,7 +27,7 @@ index d7aa4ef..ef09c0f 100644
 -	$(EXPAND_LIBS_GEN) -o $@ $(OBJS) $(LOBJS) $(SHARED_LIBRARY_LIBS)
 +	$(EXPAND_LIBS_GEN) -o $@ $(OBJS) $(SHARED_LIBRARY_LIBS)
 +	@$(PYTHON) $(topsrcdir)/tools/hackymake/makehacky.py \
-+		"$(DEPTH)" \
++		"$(if $(TOP_DIST),$(TOP_DIST)/..,$(DEPTH))" \
 +		"$(realpath .)" \
 +		"$@" \
 +		"$(filter %.$(LIB_SUFFIX),$(LIBRARY)) $(OBJS) $(EXTRA_DEPS)" \
@@ -58,7 +58,7 @@ index d7aa4ef..ef09c0f 100644
 -endif # DTRACE_LIB_DEPENDENT
 +endif
 +	@$(PYTHON) $(topsrcdir)/tools/hackymake/makehacky.py \
-+		"$(DEPTH)" \
++		"$(if $(TOP_DIST),$(TOP_DIST)/..,$(DEPTH))" \
 +		"$(realpath .)" \
 +		"$@" \
 +		"$(OBJS) $(DEF_FILE) $(LIBRARY) $(EXTRA_DEPS)" \
@@ -72,7 +72,7 @@ index d7aa4ef..ef09c0f 100644
  	@$(MAKE_DEPS_AUTO_CC)
  	$(ELOG) $(CC) $(OUTOPTION)$@ -c $(COMPILE_CFLAGS) $(TARGET_LOCAL_INCLUDES) $(_VPATH_SRCS)
 +	@$(PYTHON) $(topsrcdir)/tools/hackymake/makehacky.py cc \
-+		"$(DEPTH)" \
++		"$(if $(TOP_DIST),$(TOP_DIST)/..,$(DEPTH))" \
 +		"$(realpath .)" \
 +		"$@" \
 +		"$(_VPATH_SRCS)" \
@@ -89,7 +89,7 @@ index d7aa4ef..ef09c0f 100644
  	@$(MAKE_DEPS_AUTO_CXX)
  	$(ELOG) $(CCC) $(OUTOPTION)$@ -c $(COMPILE_CXXFLAGS) $(TARGET_LOCAL_INCLUDES) $(_VPATH_SRCS)
 +	@$(PYTHON) $(topsrcdir)/tools/hackymake/makehacky.py cc \
-+		"$(DEPTH)" \
++		"$(if $(TOP_DIST),$(TOP_DIST)/..,$(DEPTH))" \
 +		"$(realpath .)" \
 +		"$@" \
 +		"$(_VPATH_SRCS)" \
@@ -104,7 +104,7 @@ index d7aa4ef..ef09c0f 100644
  	@$(MAKE_DEPS_AUTO_CXX)
  	$(ELOG) $(CCC) -o $@ -c $(COMPILE_CXXFLAGS) $(COMPILE_CMMFLAGS) $(TARGET_LOCAL_INCLUDES) $(_VPATH_SRCS)
 +	@$(PYTHON) $(topsrcdir)/tools/hackymake/makehacky.py cc \
-+		"$(DEPTH)" \
++		"$(if $(TOP_DIST),$(TOP_DIST)/..,$(DEPTH))" \
 +		"$(realpath .)" \
 +		"$@" \
 +		"$(_VPATH_SRCS)" \
@@ -119,7 +119,7 @@ index d7aa4ef..ef09c0f 100644
  	@$(MAKE_DEPS_AUTO_CC)
  	$(ELOG) $(CC) -o $@ -c $(COMPILE_CFLAGS) $(COMPILE_CMFLAGS) $(TARGET_LOCAL_INCLUDES) $(_VPATH_SRCS)
 +	@$(PYTHON) $(topsrcdir)/tools/hackymake/makehacky.py cc \
-+		"$(DEPTH)" \
++		"$(if $(TOP_DIST),$(TOP_DIST)/..,$(DEPTH))" \
 +		"$(realpath .)" \
 +		"$@" \
 +		"$(_VPATH_SRCS)" \
@@ -131,11 +131,20 @@ index d7aa4ef..ef09c0f 100644
  
  %.s: %.cpp $(call mkdir_deps,$(MDDEPDIR))
  	$(CCC) -S $(COMPILE_CXXFLAGS) $(TARGET_LOCAL_INCLUDES) $(_VPATH_SRCS)
+@@ -1723,7 +1782,7 @@ endif
+ # FOO_FILES := foo bar
+ # FOO_EXECUTABLES := baz
+ # FOO_DEST := target_path
+-# INSTALL_TARGETS += FOO
++#I NSTALL_TARGETS += FOO
+ #
+ # Additionally, a FOO_TARGET variable may be added to indicate the target for
+ # which the files and executables are installed. Default is "libs".
 @@ -1744,14 +1803,15 @@ $(or $(3),libs):: $(2)/$(notdir $(1))
  $(call install_cmd_override,$(2)/$(notdir $(1)))
  $(2)/$(notdir $(1)): $(1)
  	$$(call install_cmd,$(4) "$$<" "$${@D}")
-+	$(PYTHON) $(topsrcdir)/tools/hackymake/makehacky.py install "$(DEPTH)" "$(category)" "$$<" "$${@D}"
++	$(PYTHON) $(topsrcdir)/tools/hackymake/makehacky.py install "$(if $(TOP_DIST),$(TOP_DIST)/..,$(DEPTH))" "$(category)" "$$<" "$${@D}"
  endef
  $(foreach category,$(INSTALL_TARGETS),\
    $(if $($(category)_DEST),,$(error Missing $(category)_DEST))\
@@ -150,7 +159,7 @@ index d7aa4ef..ef09c0f 100644
  )
  
 diff --git a/js/src/config/rules.mk b/js/src/config/rules.mk
-index d7aa4ef..ef09c0f 100644
+index d7aa4ef..2632193 100644
 --- a/js/src/config/rules.mk
 +++ b/js/src/config/rules.mk
 @@ -970,15 +970,27 @@ EXTRA_DEPS += $(DTRACE_PROBE_OBJ)
@@ -166,7 +175,7 @@ index d7aa4ef..ef09c0f 100644
 -
 -$(filter-out %.$(LIB_SUFFIX),$(LIBRARY)): $(filter %.$(LIB_SUFFIX),$(LIBRARY)) $(OBJS) $(LOBJS) $(EXTRA_DEPS) $(GLOBAL_DEPS)
 +	@$(PYTHON) $(topsrcdir)/tools/hackymake/makehacky.py \
-+		"$(DEPTH)" \
++		"$(if $(TOP_DIST),$(TOP_DIST)/..,$(DEPTH))" \
 +		"$(realpath .)" \
 +		"$@" \
 +		"$(OBJS) $(EXTRA_DEPS)" \
@@ -178,7 +187,7 @@ index d7aa4ef..ef09c0f 100644
 -	$(EXPAND_LIBS_GEN) -o $@ $(OBJS) $(LOBJS) $(SHARED_LIBRARY_LIBS)
 +	$(EXPAND_LIBS_GEN) -o $@ $(OBJS) $(SHARED_LIBRARY_LIBS)
 +	@$(PYTHON) $(topsrcdir)/tools/hackymake/makehacky.py \
-+		"$(DEPTH)" \
++		"$(if $(TOP_DIST),$(TOP_DIST)/..,$(DEPTH))" \
 +		"$(realpath .)" \
 +		"$@" \
 +		"$(filter %.$(LIB_SUFFIX),$(LIBRARY)) $(OBJS) $(EXTRA_DEPS)" \
@@ -209,7 +218,7 @@ index d7aa4ef..ef09c0f 100644
 -endif # DTRACE_LIB_DEPENDENT
 +endif
 +	@$(PYTHON) $(topsrcdir)/tools/hackymake/makehacky.py \
-+		"$(DEPTH)" \
++		"$(if $(TOP_DIST),$(TOP_DIST)/..,$(DEPTH))" \
 +		"$(realpath .)" \
 +		"$@" \
 +		"$(OBJS) $(DEF_FILE) $(LIBRARY) $(EXTRA_DEPS)" \
@@ -223,7 +232,7 @@ index d7aa4ef..ef09c0f 100644
  	@$(MAKE_DEPS_AUTO_CC)
  	$(ELOG) $(CC) $(OUTOPTION)$@ -c $(COMPILE_CFLAGS) $(TARGET_LOCAL_INCLUDES) $(_VPATH_SRCS)
 +	@$(PYTHON) $(topsrcdir)/tools/hackymake/makehacky.py cc \
-+		"$(DEPTH)" \
++		"$(if $(TOP_DIST),$(TOP_DIST)/..,$(DEPTH))" \
 +		"$(realpath .)" \
 +		"$@" \
 +		"$(_VPATH_SRCS)" \
@@ -240,7 +249,7 @@ index d7aa4ef..ef09c0f 100644
  	@$(MAKE_DEPS_AUTO_CXX)
  	$(ELOG) $(CCC) $(OUTOPTION)$@ -c $(COMPILE_CXXFLAGS) $(TARGET_LOCAL_INCLUDES) $(_VPATH_SRCS)
 +	@$(PYTHON) $(topsrcdir)/tools/hackymake/makehacky.py cc \
-+		"$(DEPTH)" \
++		"$(if $(TOP_DIST),$(TOP_DIST)/..,$(DEPTH))" \
 +		"$(realpath .)" \
 +		"$@" \
 +		"$(_VPATH_SRCS)" \
@@ -255,7 +264,7 @@ index d7aa4ef..ef09c0f 100644
  	@$(MAKE_DEPS_AUTO_CXX)
  	$(ELOG) $(CCC) -o $@ -c $(COMPILE_CXXFLAGS) $(COMPILE_CMMFLAGS) $(TARGET_LOCAL_INCLUDES) $(_VPATH_SRCS)
 +	@$(PYTHON) $(topsrcdir)/tools/hackymake/makehacky.py cc \
-+		"$(DEPTH)" \
++		"$(if $(TOP_DIST),$(TOP_DIST)/..,$(DEPTH))" \
 +		"$(realpath .)" \
 +		"$@" \
 +		"$(_VPATH_SRCS)" \
@@ -270,7 +279,7 @@ index d7aa4ef..ef09c0f 100644
  	@$(MAKE_DEPS_AUTO_CC)
  	$(ELOG) $(CC) -o $@ -c $(COMPILE_CFLAGS) $(COMPILE_CMFLAGS) $(TARGET_LOCAL_INCLUDES) $(_VPATH_SRCS)
 +	@$(PYTHON) $(topsrcdir)/tools/hackymake/makehacky.py cc \
-+		"$(DEPTH)" \
++		"$(if $(TOP_DIST),$(TOP_DIST)/..,$(DEPTH))" \
 +		"$(realpath .)" \
 +		"$@" \
 +		"$(_VPATH_SRCS)" \
@@ -282,11 +291,20 @@ index d7aa4ef..ef09c0f 100644
  
  %.s: %.cpp $(call mkdir_deps,$(MDDEPDIR))
  	$(CCC) -S $(COMPILE_CXXFLAGS) $(TARGET_LOCAL_INCLUDES) $(_VPATH_SRCS)
+@@ -1723,7 +1782,7 @@ endif
+ # FOO_FILES := foo bar
+ # FOO_EXECUTABLES := baz
+ # FOO_DEST := target_path
+-# INSTALL_TARGETS += FOO
++#I NSTALL_TARGETS += FOO
+ #
+ # Additionally, a FOO_TARGET variable may be added to indicate the target for
+ # which the files and executables are installed. Default is "libs".
 @@ -1744,14 +1803,15 @@ $(or $(3),libs):: $(2)/$(notdir $(1))
  $(call install_cmd_override,$(2)/$(notdir $(1)))
  $(2)/$(notdir $(1)): $(1)
  	$$(call install_cmd,$(4) "$$<" "$${@D}")
-+	$(PYTHON) $(topsrcdir)/tools/hackymake/makehacky.py install "$(DEPTH)" "$(category)" "$$<" "$${@D}"
++	$(PYTHON) $(topsrcdir)/tools/hackymake/makehacky.py install "$(if $(TOP_DIST),$(TOP_DIST)/..,$(DEPTH))" "$(category)" "$$<" "$${@D}"
  endef
  $(foreach category,$(INSTALL_TARGETS),\
    $(if $($(category)_DEST),,$(error Missing $(category)_DEST))\

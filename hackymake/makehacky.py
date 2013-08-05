@@ -18,7 +18,6 @@ makehackypy = None
 objroot = None
 hackydir = None
 treeloc = None
-hackybase = None
 hackyfilename = None
 
 def gethackyext():
@@ -34,14 +33,18 @@ def gethackyext():
         sys.exit(1)
 
 def computepaths(depthstr, dotpath, target):
-    global makehackypy, objroot, hackydir, treeloc, hackybase, hackyfilename
+    global makehackypy, objroot, hackydir, treeloc, hackyfilename
     objroot = os.path.abspath(os.path.join(dotpath, depthstr)).replace("\\", "/")
     hackydir = os.path.join(objroot, ".hacky").replace("\\", "/")
 
     # figure out the path relative to the objroot (maybe abspath dotpath?)
     treeloc = os.path.relpath(dotpath, objroot).replace("\\", "/")
-    hackybase = re.sub(r'[/\\]', '_', treeloc)
-    hackyfilename = hackybase + "_" + os.path.basename(target) + gethackyext()
+    hackybase = re.sub(r'[/\\]', '_', treeloc) + "_"
+    # for things that are in the toplevel dir, the hacky files shouldn't
+    # start with "._" because derp.
+    if hackybase == "._":
+        hackybase = ""
+    hackyfilename = hackybase + os.path.basename(target) + gethackyext()
 
     # and fix up makehackypy
     makehackypy = os.path.relpath(makehackypy, dotpath).replace("\\", "/")
@@ -80,7 +83,11 @@ def abspp(ppfile, outfile, targetdir, targetname):
                     continue
                 deps.append(token)
     deps = list(set(deps))
-    print >>fpout, "%s/%s: %s" % (targetdir, targetname, " ".join(deps))
+    if targetdir == ".":
+        dirprefix = ""
+    else:
+        dirprefix = targetdir + "/"
+    print >>fpout, "%s%s: %s" % (dirprefix, targetname, " ".join(deps))
     fpin.close()
     fpout.close()
 
@@ -227,7 +234,7 @@ def makeinstall(depthstr, category, source, destdir):
     target = relpath(os.path.join(destdir, targetfile))
 
     # hack -- redo this since we computed a proper target file now
-    global hackybase, hackyfilename
+    global hackyfilename
     hackybase = re.sub(r'[/\\]', '_', treeloc)
     hackyfilename = hackybase + "_" + os.path.basename(target) + gethackyext()
 
