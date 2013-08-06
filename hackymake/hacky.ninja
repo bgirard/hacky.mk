@@ -2,7 +2,15 @@ PYTHON = python
 repp = true
 ninja_required_version = 1.3
 
+# Both these rules are marked as generators so that ninja
+# ignores the command line when deciding whether the target
+# needs to be rebuilt.  After a clobber (make) build,
+# ninja won't have ever seen the command lines for the targets,
+# so it will decide that everything needs to be rebuilt.
+# Marking the rules as generators avoids this for now.
+
 rule do_build
+  generator = true
   description = $out
   command = ${buildcommand}
 
