@@ -280,8 +280,11 @@ def genMsvcSolution(tree_root, projects):
     solution.append('\tEndGlobalSection')
     solution.append('EndGlobal')
 
+    data = "\n".join(solution)
+
     msvcSlnfile = open(os.path.join(tree_root, "gecko.sln"), "w")
-    print >>msvcSlnfile, "\n".join(solution)
+    print >>msvcSlnfile, data
+
 if __name__ == "__main__":
     args = sys.argv
 
@@ -292,9 +295,11 @@ if __name__ == "__main__":
 
     hackyMap = readhacky(tree_base)
 
-    genMsvc(tree_base, hackyMap, hackyMap["layout/media/gkmedias.dll"])
-    genMsvc(tree_base, hackyMap, hackyMap["toolkit/library/xul.dll"])
-    genMsvc(tree_base, hackyMap, hackyMap["memory/mozalloc/mozalloc.dll"])
-    genMsvc(tree_base, hackyMap, hackyMap["mozglue/build/mozglue.dll"])
+    solutionProjects = []
+    for targetName in hackyMap:
+        if targetName.endswith(".dll"):
+            print "Generating: " + targetName
+            solutionProjects.append(os.path.basename(targetName).encode("utf-8"))
+            genMsvc(tree_base, hackyMap, hackyMap[targetName])
 
-    genMsvcSolution(tree_base, ["xul.dll", "gkmedias.dll", "mozalloc.dll", "mozglue.dll"])
+    genMsvcSolution(tree_base, solutionProjects)
