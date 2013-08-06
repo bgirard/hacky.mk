@@ -1,9 +1,14 @@
 #!/usr/bin/env python
 
-import os
-import sys
+import os, sys, re
 
 DEBUG = True
+tree_base = None
+
+def relpath(p, root = None):
+    if not root:
+        root = tree_base
+    return os.path.relpath(p, root).replace("\\", "/")
 
 def readpp(ppfile):
     deps = []
@@ -158,82 +163,152 @@ class MsvcPrinter:
     def getFilters(self):
         return "\n".join(self.filtersOut)
 
-def parseDefines(cflags):
-    defines = []
-    for flag in cflags.split(" "):
-        if flag.startswith("-D"):
-            flag = flag[2:]
-            defineParts = flag.split("=",1)
-            if len(defineParts) > 1:
-                if defineParts[1].startswith('"') and defineParts[1].endswith('"') or \
-                   defineParts[1].startswith("'") and defineParts[1].endswith("'"):
-                    defineParts[1] = defineParts[1][1:-1]
-                    defineParts[1] = defineParts[1].replace('\\"', '"')
-                defineParts[1].replace('\\"', '"')
-                flag = defineParts[0] + "=" + defineParts[1]
-            defines.append(flag)
-    return ";".join(defines)
-
-def parsePdb(tree_root, target, cflags):
-    pdbName = ""
-    for flag in cflags.split(" "):
-        if flag.startswith("-Fd"):
-            pdbName = os.path.join(tree_root, target['treeloc'], flag[3:]).replace("/","\\")
-    return pdbName
-
-def additionalInclude(tree_root, target, cflags):
-    includes = []
-    for flag in cflags.split(" "):
-        if flag.startswith("-I"):
-            includeDir = flag[2:]
-            includes.append(os.path.join(tree_root, target['treeloc'], includeDir).replace("/","\\"))
-    return ";".join(includes)
-
-def additionalFlags(tree_root, target, cflags):
-    flags = []
-    fixPathForNextFlag = False
-    for flag in cflags.split(" "):
-        if flag.startswith("-D") or flag.startswith("-I") or flag == "" or flag.startswith("-Fd"):
-            continue
-        if fixPathForNextFlag:
-            fixPathForNextFlag = False
-            flag = os.path.join(tree_root, target['treeloc'], flag).replace("/","\\")
-        if flag == "-FI":
-            fixPathForNextFlag = True
-        flags.append(flag)
-
-    return " ".join(flags)
-
 def escapeForMsvcXML(str):
     str = str.replace("<", "&lt;")
     str = str.replace(">", "&gt;")
     return str
 
-def genMsvcClCompile(msvcProj, tree_root, hackyMap, target):
+def makeMsvcPath(treeloc, name, basepath=None):
+    if basepath is None:
+        basepath = tree_base
+    return os.path.relpath(os.path.join(treeloc, name), basepath).replace("/","\\")
 
-    srcName = (target["treeloc"] + "/" + target["srcfiles"][0]).replace("/","\\")
-    objName = (target["treeloc"] + "/" + target["targetfile"]).replace("/","\\")
-    preprocessorDef = parseDefines(target["cflags"])
-    pdbName = parsePdb(tree_root, target, target["cflags"])
-    includeDirs = additionalInclude(tree_root, target, target["cflags"])
-    flags = additionalFlags(tree_root, target, target["cflags"])
+def genMsvcClCompile(msvcProj, tree_root, hackyMap, target):
+    srcName = makeMsvcPath(target["treeloc"], target["srcfiles"][0])
+    objName = makeMsvcPath(target["treeloc"], target["targetfile"])
+
+    defines = []
+    includeDirs = []
+    extraConfigLines = []
+    extraArgs = []
+
+    # this is explicitly not going to handle quoting outside of a single arg,
+    # because life is too short
+    tokens = (target["cflags"].split(" ")).__iter__()
+    midparse = False
+    try:
+        while True:
+            midparse = False
+            token = tokens.next()
+            midparse = True
+            m = None
+
+            m = re.match(r"^[-/]D(.*)", token)
+            if m:
+                arg = m.group(1) or tokens.next()
+                defines.append(arg)
+                continue
+
+            m = re.match(r"[-/]I(.*)", token)
+            if m:
+                path = m.group(1) or tokens.next()
+                includeDirs.append(makeMsvcPath(target["treeloc"], path))
+                continue
+
+            m = re.match(r"[-/]W([0-5])$", token)
+            if m:
+                extraConfigLines.append("<WarningLevel>Level%s</WarningLevel>" % (m.group(1)))
+                continue
+
+            m = re.match(r"[-/]O([12d])$", token)
+            if m:
+                arg = m.group(1)
+                if arg == "1":   arg = "MinSpace"
+                elif arg == "2": arg = "MaxSpeed"
+                elif arg == "d": arg = "Disabled"
+                extraConfigLines.append("<Optimization>%s</Optimization>" % (arg))
+                continue
+
+            m = re.match(r"[-/]Z([Ii7])$", token)
+            if m:
+                arg = m.group(1)
+                if arg == "i":   arg = "ProgramDatabase"
+                elif arg == "7": arg = "OldStyle"
+                elif arg == "I": arg = "EditAndContinue"
+                extraConfigLines.append("<DebugInformationFormat>%s</DebugInformationFormat>" % (arg))
+                continue
+
+            m = re.match(r"[-/](MT|MTd|MD|MDd)$", token)
+            if m:
+                arg = m.group(1)
+                if   arg == "MT":  arg = "MultiThreaded"
+                elif arg == "MTd": arg = "MultiThreadedDebug"
+                elif arg == "MD":  arg = "MultiThreadedDLL"
+                elif arg == "MDd": arg = "MultiThreadedDebugDLL"
+                extraConfigLines.append("<RuntimeLibrary>%s</RuntimeLibrary>" % (arg))
+                continue
+
+            m = re.match(r"[-/]Fd(.*)", token)
+            if m:
+                path = m.group(1) or tokens.next()
+                path = makeMsvcPath(target["treeloc"], path)
+                extraConfigLines.append("<ProgramDataBaseFileName>%s</ProgramDataBaseFileName>" % (path))
+                continue
+
+            m = re.match(r"[-/]FI(.*)", token)
+            if m:
+                path = m.group(1) or tokens.next()
+                path = makeMsvcPath(target["treeloc"], path, target["treeloc"])
+                extraConfigLines.append("<ForcedIncludeFiles>%s</ForcedIncludeFiles>" % (path))
+                continue
+
+            m = re.match(r"[-/]T([CP])$", token)
+            if m:
+                arg = m.group(1)
+                if arg == "C": arg = "CompileAsC"
+                else:          arg = "CompileAsCpp"
+                extraConfigLines.append("<CompileAs>%s</CompileAs>" % (arg))
+                continue
+
+            m = re.match(r"[-/]Gy(-?)$", token)
+            if m:
+                arg = m.group(1)
+                if arg == "-": arg = "false"
+                else:          arg = "true"
+                extraConfigLines.append("<FunctionLevelLinking>%s</FunctionLevelLinking>" % (arg))
+                continue
+
+            m = re.match(r"[-/]GR(-?)$", token)
+            if m:
+                arg = m.group(1)
+                if arg == "-": arg = "false"
+                else:          arg = "true"
+                extraConfigLines.append("<RuntimeTypeInfo>%s</RuntimeTypeInfo>" % (arg))
+                continue
+
+            m = re.match(r"[-/]Oy(-?)$", token)
+            if m:
+                arg = m.group(1)
+                if arg == "-": arg = "false"
+                else:          arg = "true"
+                extraConfigLines.append("<OmitFramePointers>%s</OmitFramePointers>" % (arg))
+                continue
+
+            extraArgs.append(token)
+    except StopIteration:
+        if midparse:
+            print >>sys.stderr, "Failed parsing msvc cflags"
+            sys.exit(1)
+
     folder = target["treeloc"]
 
-    msvcProj.appendLineOpen('<ClCompile Include="%s">' % escapeForMsvcXML(srcName));
-    msvcProj.appendLine('<ObjectFileName>%s</ObjectFileName>' % escapeForMsvcXML(objName));
-    msvcProj.appendLine('<PreprocessorDefinitions>%s</PreprocessorDefinitions>' % escapeForMsvcXML(preprocessorDef));
-    if includeDirs != "":
-        msvcProj.appendLine('<AdditionalIncludeDirectories>%s;%%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>' % escapeForMsvcXML(includeDirs));
-    if pdbName != "":
-        msvcProj.appendLine('<ProgramDataBaseFileName>%s</ProgramDataBaseFileName>' % escapeForMsvcXML(pdbName));
-    if flags != "":
-        msvcProj.appendLine('<AdditionalOptions>%s %%(AdditionalOptions)</AdditionalOptions>' % escapeForMsvcXML(flags));
-    msvcProj.appendLineClose('</ClCompile>');
+    defines.append("%(PreprocessorDefinitions)")
+    includeDirs.append("%(AdditionalIncludeDirectories)")
+    extraArgs.append("%(AdditionalOptions)")
 
-    msvcProj.filtersLineOpen('<ClCompile Include="%s">' % escapeForMsvcXML(srcName));
-    msvcProj.filtersLine('<Filter>%s</Filter>' % escapeForMsvcXML(folder));
+    msvcProj.appendLineOpen('<ClCompile Include="%s">' % escapeForMsvcXML(srcName))
+    msvcProj.appendLine('<ObjectFileName>%s</ObjectFileName>' % escapeForMsvcXML(objName))
+    msvcProj.appendLine('<PreprocessorDefinitions>%s</PreprocessorDefinitions>' % escapeForMsvcXML(";".join(defines)))
+    msvcProj.appendLine('<AdditionalIncludeDirectories>%s;%%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>' % escapeForMsvcXML(";".join(includeDirs)))
+    for config in extraConfigLines:
+        msvcProj.appendLine(config)
+    msvcProj.appendLine('<AdditionalOptions>%s</AdditionalOptions>' % escapeForMsvcXML(" ".join(extraArgs)))
+    msvcProj.appendLineClose('</ClCompile>')
+
+    msvcProj.filtersLineOpen('<ClCompile Include="%s">' % escapeForMsvcXML(srcName))
+    msvcProj.filtersLine('<Filter>%s</Filter>' % escapeForMsvcXML(folder))
     msvcProj.folders[folder] = True
-    msvcProj.filtersLineClose('</ClCompile>');
+    msvcProj.filtersLineClose('</ClCompile>')
 
 def genMsvcTargetCompile(msvcProj, tree_root, hackyMap, target):
     objdeps = target["ppDeps"]
@@ -282,6 +357,7 @@ def genMsvcSolution(tree_root, projects):
 
     msvcSlnfile = open(os.path.join(tree_root, "gecko.sln"), "w")
     print >>msvcSlnfile, "\n".join(solution)
+
 if __name__ == "__main__":
     args = sys.argv
 
