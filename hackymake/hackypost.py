@@ -255,6 +255,33 @@ def genMsvc(tree_root, hackyMap, target):
     filtersfile = open(os.path.join(tree_root, target["target"] + ".vcxproj.filters"), "w")
     print >>filtersfile, msvcProj.getFilters()
 
+def genMsvcSolution(tree_root, projects):
+    solution = []
+
+    # Solution files have magic leading bits
+    # 00000000: efbb bf0d 0a4d 6963 726f 736f 6674 2056  .....Microsoft V
+    solution.append(str(chr(239)) + str(chr(187)) + str(chr(191)))
+    solution.append('Microsoft Visual Studio Solution File, Format Version 11.00')
+    solution.append('# Visual Studio 2010')
+    for project in projects:
+        solution.append(('Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "%s", "%s.vcxproj", "{CDF26D50-0415-4FCF-8498-9FFB7592413A}"') % (project, project))
+        solution.append('EndProject')
+
+    solution.append('Global')
+    solution.append('\tGlobalSection(SolutionConfigurationPlatforms) = preSolution')
+    solution.append('\t\tGeckoImported|Win32 = GeckoImported|Win32')
+    solution.append('\tEndGlobalSection')
+    solution.append('\tGlobalSection(ProjectConfigurationPlatforms) = postSolution')
+    solution.append('\t\t{CDF26D50-0415-4FCF-8498-9FFB7592413A}.GeckoImported|Win32.ActiveCfg = GeckoImported|Win32')
+    solution.append('\t\t{CDF26D50-0415-4FCF-8498-9FFB7592413A}.GeckoImported|Win32.Build.0 = GeckoImported|Win32')
+    solution.append('\tEndGlobalSection')
+    solution.append('\tGlobalSection(SolutionProperties) = preSolution')
+    solution.append('\t\tHideSolutionNode = FALSE')
+    solution.append('\tEndGlobalSection')
+    solution.append('EndGlobal')
+
+    msvcSlnfile = open(os.path.join(tree_root, "gecko.sln"), "w")
+    print >>msvcSlnfile, "\n".join(solution)
 if __name__ == "__main__":
     args = sys.argv
 
@@ -267,3 +294,7 @@ if __name__ == "__main__":
 
     genMsvc(tree_base, hackyMap, hackyMap["layout/media/gkmedias.dll"])
     genMsvc(tree_base, hackyMap, hackyMap["toolkit/library/xul.dll"])
+    genMsvc(tree_base, hackyMap, hackyMap["memory/mozalloc/mozalloc.dll"])
+    genMsvc(tree_base, hackyMap, hackyMap["mozglue/build/mozglue.dll"])
+
+    genMsvcSolution(tree_base, ["xul.dll", "gkmedias.dll", "mozalloc.dll", "mozglue.dll"])
