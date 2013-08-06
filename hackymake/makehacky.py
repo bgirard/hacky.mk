@@ -6,7 +6,6 @@ import os
 from tokenize import tokenize, untokenize, NUMBER, STRING, NAME, OP
 
 DEBUG = False
-HACKY_BACKEND = os.getenv("HACKY_BACKEND") or "ninja"
 
 #
 # Note: We use Unix style path separators everywhere, and normalize DOS ones
