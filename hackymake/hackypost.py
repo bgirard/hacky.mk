@@ -171,7 +171,7 @@ def escapeForMsvcXML(str):
 def makeMsvcPath(treeloc, name, basepath=None):
     if basepath is None:
         basepath = tree_base
-    return os.path.relpath(os.path.join(treeloc, name), basepath).replace("/","\\")
+    return os.path.relpath(os.path.join(tree_base, treeloc, name), basepath).replace("/","\\")
 
 def genMsvcClCompile(msvcProj, tree_root, hackyMap, target):
     srcName = makeMsvcPath(target["treeloc"], target["srcfiles"][0])
@@ -386,7 +386,7 @@ if __name__ == "__main__":
     # save script name
     makehackypy = os.path.abspath(args.pop(0))
 
-    tree_base = args.pop(0)
+    tree_base = os.path.abspath(args.pop(0))
 
     hackyMap = readhacky(tree_base)
 
