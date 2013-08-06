@@ -2,7 +2,6 @@ PYTHON = python
 repp = true
 
 rule do_build
-  generator = true
   description = $out
   depfile = ${depfile}
   command = ${buildcommand}
