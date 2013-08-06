@@ -69,7 +69,7 @@ def gypTargetLibrary(tree_root, hackyMap, target):
     }
     return gypTarget
 
-def genMsvcHeader(msvcProj):
+def genMsvcHeader(msvcProj, target):
     msvcProj.appendLine('<?xml version="1.0" encoding="utf-8"?>');
     msvcProj.appendLineOpen('<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">')
     msvcProj.appendLineOpen('<ItemGroup Label="ProjectConfigurations">');
@@ -96,6 +96,9 @@ def genMsvcHeader(msvcProj):
     msvcProj.appendLine('<PropertyGroup Label="UserMacros" />');
     msvcProj.appendLineOpen('<PropertyGroup Condition="\'$(Configuration)|$(Platform)\'==\'GeckoImported|Win32\'">');
     msvcProj.appendLine('<LinkIncremental>true</LinkIncremental>');
+    msvcProj.appendLine('<TargetPath>%s</TargetPath>' % escapeForMsvcXML(target["treeloc"]).replace("/","\\"));
+    msvcProj.appendLine('<TargetName>%s</TargetName>' % escapeForMsvcXML(target["target"]).replace("/","\\")[:-4]);
+    msvcProj.appendLine('<ProgramDatabaseFile>%s</ProgramDatabaseFile>' % escapeForMsvcXML(target["treeloc"] + "\\" + target["target"][:-4] + ".pdb").replace("/","\\"));
     msvcProj.appendLineClose('</PropertyGroup>');
 
     # Here we can either build with optimation or debug and continue but not both
@@ -106,15 +109,12 @@ def genMsvcHeader(msvcProj):
     msvcProj.appendLineClose('</ClCompile>')
     msvcProj.appendLineClose('</ItemDefinitionGroup>')
 
-    msvcProj.appendLineOpen('<ItemGroup>');
-
     # Use the filters file for olders
     msvcProj.filtersLine('<?xml version="1.0" encoding="utf-8"?>');
     msvcProj.filtersLineOpen('<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">');
     msvcProj.filtersLineOpen('<ItemGroup>');
 
 def genMsvcFooter(msvcProj):
-    msvcProj.appendLineClose('</ItemGroup>');
     msvcProj.appendLine('<Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />');
     msvcProj.appendLineOpen('<ImportGroup Label="ExtensionTargets">');
     msvcProj.appendLineClose('</ImportGroup>');
@@ -237,17 +237,37 @@ def genMsvcClCompile(msvcProj, tree_root, hackyMap, target):
 
 def genMsvcTargetCompile(msvcProj, tree_root, hackyMap, target):
     objdeps = target["ppDeps"]
+    objsToLink = [] # Object
+
+    msvcProj.appendLineOpen('<ItemGroup>');
     for objdep in objdeps:
         if objdep in hackyMap and "srcfiles" in hackyMap[objdep] and hackyMap[objdep]["srcfiles"]:
             #print hackyMap[objdep]["treeloc"] + "/" + hackyMap[objdep]["srcfiles"][0]
             genMsvcClCompile(msvcProj, tree_root, hackyMap, hackyMap[objdep])
+        elif objdep.endswith(".desc"):
+            print "Skipping desc: " + objdep
         else:
-            pass #print "ERROR: Don't have srcdeps for: " + objdep
+            print "Warning: Don't have srcdeps for: " + objdep.replace("\n","") + ", wont be updated with msbuild"
+            objsToLink.append(objdep.replace("\n",""))
+    msvcProj.appendLineOpen('</ItemGroup>');
+
+    additionalDeps = escapeForMsvcXML(";".join(objsToLink))
+    outFile = (target["treeloc"] + "/" + target["target"]).replace("/","\\")
+    #if outFile.endswith(".dll"):
+    #    outFile = outFile[:-4]
+    msvcProj.appendLineOpen('<ItemDefinitionGroup>')
+    msvcProj.appendLineOpen('<Link>')
+    msvcProj.appendLine('<GenerateDebugInformation>true</GenerateDebugInformation>')
+    msvcProj.appendLine('<OutputFile>%s</OutputFile>' % outFile)
+    if additionalDeps != "":
+        msvcProj.appendLine('<AdditionalDependencies>%s</AdditionalDependencies>' % additionalDeps)
+    msvcProj.appendLineClose('</Link>')
+    msvcProj.appendLineClose('</ItemDefinitionGroup>')
             
 
 def genMsvc(tree_root, hackyMap, target):
     msvcProj = MsvcPrinter()
-    genMsvcHeader(msvcProj)
+    genMsvcHeader(msvcProj, target)
     genMsvcTargetCompile(msvcProj, tree_root, hackyMap, target)
     genMsvcFooter(msvcProj)
     msvcfile = open(os.path.join(tree_root, target["target"] + ".vcxproj"), "w")
