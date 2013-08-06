@@ -170,25 +170,6 @@ diff --git a/config/rules.mk b/config/rules.mk
  	$(CCC) -S $(COMPILE_CXXFLAGS) $(TARGET_LOCAL_INCLUDES) $(_VPATH_SRCS)
  
  %.s: %.c $(call mkdir_deps,$(MDDEPDIR))
-@@ -1719,17 +1778,17 @@ endif
- #
- # The INSTALL_TARGETS variable contains a list of all install target
- # categories. Each category defines a list of files and executables, and an
- # install destination,
- #
- # FOO_FILES := foo bar
- # FOO_EXECUTABLES := baz
- # FOO_DEST := target_path
--# INSTALL_TARGETS += FOO
-+#I NSTALL_TARGETS += FOO
- #
- # Additionally, a FOO_TARGET variable may be added to indicate the target for
- # which the files and executables are installed. Default is "libs".
- 
- # If we're using binary nsinstall and it's not built yet, fallback to python nsinstall.
- ifneq (,$(filter $(CONFIG_TOOLS)/nsinstall$(HOST_BIN_SUFFIX),$(install_cmd)))
- ifeq (,$(wildcard $(CONFIG_TOOLS)/nsinstall$(HOST_BIN_SUFFIX)))
- nsinstall_is_usable = $(if $(wildcard $(CONFIG_TOOLS)/nsinstall$(HOST_BIN_SUFFIX)),yes)
 @@ -1740,24 +1799,25 @@ endef
  endif
  endif
