@@ -5,6 +5,10 @@ import os, sys, re
 DEBUG = True
 tree_base = None
 
+# only matters for VS solutions, for now
+is64Bit = False
+msvcPlatform = "Win32"
+
 def relpath(p, root = None):
     if not root:
         root = tree_base
@@ -78,9 +82,9 @@ def genMsvcHeader(msvcProj, target):
     msvcProj.appendLine('<?xml version="1.0" encoding="utf-8"?>');
     msvcProj.appendLineOpen('<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">')
     msvcProj.appendLineOpen('<ItemGroup Label="ProjectConfigurations">');
-    msvcProj.appendLineOpen('<ProjectConfiguration Include="GeckoImported|Win32">');
+    msvcProj.appendLineOpen('<ProjectConfiguration Include="GeckoImported|%s">' % msvcPlatform);
     msvcProj.appendLine('<Configuration>GeckoImported</Configuration>');
-    msvcProj.appendLine('<Platform>Win32</Platform>');
+    msvcProj.appendLine('<Platform>%s</Platform>' % msvcPlatform);
     msvcProj.appendLineClose('</ProjectConfiguration>');
     msvcProj.appendLineClose('</ItemGroup>');
     msvcProj.appendLineOpen('<PropertyGroup Label="Globals">');
@@ -90,7 +94,7 @@ def genMsvcHeader(msvcProj, target):
 
     msvcProj.appendLine('<Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />');
     
-    msvcProj.appendLineOpen('<PropertyGroup Condition="\'$(Configuration)|$(Platform)\'==\'GeckoImported|Win32\'" Label="Configuration">');
+    msvcProj.appendLineOpen('<PropertyGroup Condition="\'$(Configuration)|$(Platform)\'==\'GeckoImported|%s\'" Label="Configuration">' % msvcPlatform);
     msvcProj.appendLine('<ConfigurationType>DynamicLibrary</ConfigurationType>');
     #msvcProj.appendLine('<UseDebugLibraries>true</UseDebugLibraries>');
     msvcProj.appendLine('<CharacterSet>Unicode</CharacterSet>');
@@ -99,7 +103,7 @@ def genMsvcHeader(msvcProj, target):
     msvcProj.appendLine('<Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />');
     
     msvcProj.appendLine('<PropertyGroup Label="UserMacros" />');
-    msvcProj.appendLineOpen('<PropertyGroup Condition="\'$(Configuration)|$(Platform)\'==\'GeckoImported|Win32\'">');
+    msvcProj.appendLineOpen('<PropertyGroup Condition="\'$(Configuration)|$(Platform)\'==\'GeckoImported|%s\'">' % msvcPlatform);
     msvcProj.appendLine('<LinkIncremental>true</LinkIncremental>');
     msvcProj.appendLine('<TargetPath>%s</TargetPath>' % escapeForMsvcXML(target["treeloc"]).replace("/","\\"));
     msvcProj.appendLine('<TargetName>%s</TargetName>' % escapeForMsvcXML(target["target"]).replace("/","\\")[:-4]);
@@ -107,7 +111,7 @@ def genMsvcHeader(msvcProj, target):
     msvcProj.appendLineClose('</PropertyGroup>');
 
     # Here we can either build with optimation or debug and continue but not both
-    msvcProj.appendLineOpen('<ItemDefinitionGroup Condition="\'$(Configuration)|$(Platform)\'==\'GeckoImported|Win32\'">');
+    msvcProj.appendLineOpen('<ItemDefinitionGroup Condition="\'$(Configuration)|$(Platform)\'==\'GeckoImported|%s\'">' % msvcPlatform);
     msvcProj.appendLineOpen('<ClCompile>')
     msvcProj.appendLine('<Optimization>MinSpace</Optimization>');
     msvcProj.appendLine('<ExceptionHandling>false</ExceptionHandling>');
@@ -364,11 +368,11 @@ def genMsvcSolution(tree_root, projects):
 
     solution.append('Global')
     solution.append('\tGlobalSection(SolutionConfigurationPlatforms) = preSolution')
-    solution.append('\t\tGeckoImported|Win32 = GeckoImported|Win32')
+    solution.append('\t\tGeckoImported|%s = GeckoImported|%s' % (msvcPlatform, msvcPlatform))
     solution.append('\tEndGlobalSection')
     solution.append('\tGlobalSection(ProjectConfigurationPlatforms) = postSolution')
-    solution.append('\t\t{CDF26D50-0415-4FCF-8498-9FFB7592413A}.GeckoImported|Win32.ActiveCfg = GeckoImported|Win32')
-    solution.append('\t\t{CDF26D50-0415-4FCF-8498-9FFB7592413A}.GeckoImported|Win32.Build.0 = GeckoImported|Win32')
+    solution.append('\t\t{CDF26D50-0415-4FCF-8498-9FFB7592413A}.GeckoImported|%s.ActiveCfg = GeckoImported|%s' % (msvcPlatform, msvcPlatform))
+    solution.append('\t\t{CDF26D50-0415-4FCF-8498-9FFB7592413A}.GeckoImported|%s.Build.0 = GeckoImported|%s' % (msvcPlatform, msvcPlatform))
     solution.append('\tEndGlobalSection')
     solution.append('\tGlobalSection(SolutionProperties) = preSolution')
     solution.append('\t\tHideSolutionNode = FALSE')
@@ -387,6 +391,14 @@ if __name__ == "__main__":
     makehackypy = os.path.abspath(args.pop(0))
 
     tree_base = os.path.abspath(args.pop(0))
+
+    conffile = open(os.path.join(tree_base, "config/autoconf.mk"), "r")
+    for line in conffile:
+        m = re.match(r"([A-Z0-9_]+) *= *(.*)", line.strip())
+        if m:
+            if m.groups(1)[0] == "CPU_ARCH" and m.groups(1)[1] == "x86_64":
+                is64Bit = True
+                msvcPlatform = "x64"
 
     hackyMap = readhacky(tree_base)
 
