@@ -5,6 +5,9 @@ if [ $# != 1 ] ; then
    exit 1
 fi
 
+# The directory that contains this script.
+WD="$(dirname "$0")"
+
 MC="$1"
 
 if [ ! -f "$MC"/config/rules.mk -o ! -f "$MC"/js/src/config/rules.mk ] ; then
@@ -17,11 +20,11 @@ set -e
 mkdir -p "$MC"/tools
 mkdir -p "$MC"/js/src/tools
 
-cp -r hackymake "$MC"/tools
-cp -r hackymake "$MC"/js/src/tools
+cp -r "$WD"/hackymake "$MC"/tools
+cp -r "$WD"/hackymake "$MC"/js/src/tools
 
-patch -d "$MC" --dry-run -s -f -p1 < rules.mk.patch || { echo Test patch failed, no reject generated.  Fix up rules.mk patch. ; exit 1 ; }
+patch -d "$MC" --dry-run -s -f -p1 < "$WD"/rules.mk.patch || { echo Test patch failed, no reject generated.  Fix up rules.mk patch. ; exit 1 ; }
 
-patch -d "$MC" -p1 < rules.mk.patch || { echo rules.mk.patch unexpectedly did not apply cleanly ; exit 1 ; }
-patch -d "$MC"/js/src -p1 < rules.mk.patch || { echo rules.mk.patch unexpectedly did not apply cleanly in js/src ; exit 1 ; }
+patch -d "$MC" -p1 < "$WD"/rules.mk.patch || { echo rules.mk.patch unexpectedly did not apply cleanly ; exit 1 ; }
+patch -d "$MC"/js/src -p1 < "$WD"/rules.mk.patch || { echo rules.mk.patch unexpectedly did not apply cleanly in js/src ; exit 1 ; }
 
