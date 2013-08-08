@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import os, sys, re
+import os, sys, re, uuid
 
 DEBUG = True
 tree_base = None
@@ -8,6 +8,7 @@ tree_base = None
 # only matters for VS solutions, for now
 is64Bit = False
 msvcPlatform = "Win32"
+msvcVersion = None
 
 def relpath(p, root = None):
     if not root:
@@ -88,23 +89,24 @@ def genMsvcHeader(msvcProj, target):
     msvcProj.appendLineClose('</ProjectConfiguration>');
     msvcProj.appendLineClose('</ItemGroup>');
     msvcProj.appendLineOpen('<PropertyGroup Label="Globals">');
-    msvcProj.appendLine('<ProjectGuid>{CDF26D50-0415-4FCF-8498-9FFB7592413A}</ProjectGuid>');
+    msvcProj.appendLine('<ProjectGuid>{%s}</ProjectGuid>' % target['projectGuid']);
     msvcProj.appendLine('<RootNamespace>MozillaCentral</RootNamespace>');
     msvcProj.appendLineClose('</PropertyGroup>');
 
     msvcProj.appendLine('<Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />');
-    
+
+    # These are global settings for the project.  Some things should specifically NOT be included here:
+    #     <CharacterSet>Unicode</CharacterSet> -- CharacterSet should be unset.
+    # Including this defines _UNICODE/UNICODE.
     msvcProj.appendLineOpen('<PropertyGroup Condition="\'$(Configuration)|$(Platform)\'==\'GeckoImported|%s\'" Label="Configuration">' % msvcPlatform);
     msvcProj.appendLine('<ConfigurationType>DynamicLibrary</ConfigurationType>');
     #msvcProj.appendLine('<UseDebugLibraries>true</UseDebugLibraries>');
-    msvcProj.appendLine('<CharacterSet>Unicode</CharacterSet>');
     msvcProj.appendLineClose('</PropertyGroup>');
 
     msvcProj.appendLine('<Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />');
     
     msvcProj.appendLine('<PropertyGroup Label="UserMacros" />');
     msvcProj.appendLineOpen('<PropertyGroup Condition="\'$(Configuration)|$(Platform)\'==\'GeckoImported|%s\'">' % msvcPlatform);
-    msvcProj.appendLine('<LinkIncremental>true</LinkIncremental>');
     msvcProj.appendLine('<TargetPath>%s</TargetPath>' % escapeForMsvcXML(target["treeloc"]).replace("/","\\"));
     msvcProj.appendLine('<TargetName>%s</TargetName>' % escapeForMsvcXML(target["target"]).replace("/","\\")[:-4]);
     msvcProj.appendLine('<ProgramDatabaseFile>%s</ProgramDatabaseFile>' % escapeForMsvcXML(target["treeloc"] + "\\" + target["target"][:-4] + ".pdb").replace("/","\\"));
@@ -177,6 +179,10 @@ def makeMsvcPath(treeloc, name, basepath=None):
         basepath = tree_base
     return os.path.relpath(os.path.join(tree_base, treeloc, name), basepath).replace("/","\\")
 
+# turn first-level quote escaping (\" -> ", \\ -> \) back into
+def unescapeQuotesOnce(arg):
+    return arg.replace("\\\"", "\"").replace("\\\\", "\\")
+
 def genMsvcClCompile(msvcProj, tree_root, hackyMap, target):
     srcName = makeMsvcPath(target["treeloc"], target["srcfiles"][0])
     objName = makeMsvcPath(target["treeloc"], target["targetfile"])
@@ -185,9 +191,11 @@ def genMsvcClCompile(msvcProj, tree_root, hackyMap, target):
     includeDirs = []
     extraConfigLines = []
     extraArgs = []
+    disabledWarnings = []
 
-    # this is explicitly not going to handle quoting outside of a single arg,
-    # because life is too short
+    # We don't do much with quoting, only hangling it where
+    # we must -- specifically in -D flags.  That will break
+    # if those args have embedded spaces in them.
     tokens = (target["cflags"].split(" ")).__iter__()
     midparse = False
     try:
@@ -195,12 +203,32 @@ def genMsvcClCompile(msvcProj, tree_root, hackyMap, target):
             midparse = False
             token = tokens.next()
             midparse = True
-            m = None
 
             m = re.match(r"^[-/]D(.*)", token)
             if m:
                 arg = m.group(1) or tokens.next()
-                defines.append(arg)
+                if "=" in arg and ("\"" in arg or "'" in arg):
+                    # VS does some stupid things with quoted defines.  If it sees one,
+                    # it expands out its /D NAME=value to /D "NAME=quoted_value".  So
+                    # instead of NAME="\"Foo\"", you get "NAME=\"\\\"Foo\\\"\"".  This
+                    # totally breaks any code that then does #include NAME.  If we see
+                    # one of these, we just add it as an "extra arg" so that we can
+                    # not do that external quoting ourselves.  Hopefully this won't make
+                    # it invisible to IntelliSense and similar.
+
+                    # fix up arg to remove outer ''s, we have some code, e.g.
+                    # OPUS_VERSION that uses single quotes thus:
+                    # -DOPUS_VERSION='"draft-11-mozilla"'.  We should fix the source
+                    # Makefile for this!
+                    m = re.match(r"^([^=]*)=(.*)$", arg)
+                    defname = m.group(1)
+                    defval = m.group(2)
+                    if defval.startswith("'\"") and defval.endswith("\"'"):
+                        arg = defname + "=\"\\\"" + defval[2:-2] + "\\\"\""
+
+                    extraArgs.append("/D " + arg)
+                else:
+                    defines.append(arg)
                 continue
 
             m = re.match(r"[-/]I(.*)", token)
@@ -288,25 +316,41 @@ def genMsvcClCompile(msvcProj, tree_root, hackyMap, target):
                 extraConfigLines.append("<OmitFramePointers>%s</OmitFramePointers>" % (arg))
                 continue
 
+            m = re.match(r"[-/]wd([0-9]+)", token)
+            if m:
+                arg = m.group(1)
+                disabledWarnings.append(arg)
+                continue
+
+            m = re.match(r"(?i)[-/]nologo", token)
+            if m:
+                continue
+
             extraArgs.append(token)
     except StopIteration:
         if midparse:
-            print >>sys.stderr, "Failed parsing msvc cflags"
+            print >>sys.stderr, "Failed parsing msvc cflags, target %s" % target["target"]
             sys.exit(1)
 
     folder = target["treeloc"]
 
     defines.append("%(PreprocessorDefinitions)")
     includeDirs.append("%(AdditionalIncludeDirectories)")
-    extraArgs.append("%(AdditionalOptions)")
 
     msvcProj.appendLineOpen('<ClCompile Include="%s">' % escapeForMsvcXML(srcName))
     msvcProj.appendLine('<ObjectFileName>%s</ObjectFileName>' % escapeForMsvcXML(objName))
     msvcProj.appendLine('<PreprocessorDefinitions>%s</PreprocessorDefinitions>' % escapeForMsvcXML(";".join(defines)))
-    msvcProj.appendLine('<AdditionalIncludeDirectories>%s;%%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>' % escapeForMsvcXML(";".join(includeDirs)))
+    msvcProj.appendLine('<AdditionalIncludeDirectories>%s</AdditionalIncludeDirectories>' % escapeForMsvcXML(";".join(includeDirs)))
     for config in extraConfigLines:
         msvcProj.appendLine(config)
-    msvcProj.appendLine('<AdditionalOptions>%s</AdditionalOptions>' % escapeForMsvcXML(" ".join(extraArgs)))
+
+    extraArgStr = " ".join(extraArgs).strip()
+    if extraArgStr:
+        msvcProj.appendLine('<AdditionalOptions>%s %%(AdditionalOptions)</AdditionalOptions>' % escapeForMsvcXML(extraArgStr))
+
+    if disabledWarnings:
+        msvcProj.appendLine('<DisableSpecificWarnings>%s</DisableSpecificWarnings>' % ";".join(disabledWarnings))
+
     msvcProj.appendLineClose('</ClCompile>')
 
     msvcProj.filtersLineOpen('<ClCompile Include="%s">' % escapeForMsvcXML(srcName))
@@ -324,23 +368,183 @@ def genMsvcTargetCompile(msvcProj, tree_root, hackyMap, target):
             #print hackyMap[objdep]["treeloc"] + "/" + hackyMap[objdep]["srcfiles"][0]
             genMsvcClCompile(msvcProj, tree_root, hackyMap, hackyMap[objdep])
         elif objdep.endswith(".desc"):
-            print "Skipping desc: " + objdep
+            #print "Skipping desc: " + objdep
+            pass
         else:
             print "Warning: Don't have srcdeps for: " + objdep.replace("\n","") + ", wont be updated with msbuild"
+            # append it here, and hope that it matches the extra .obj/.res in the command line
             objsToLink.append(objdep.replace("\n",""))
     msvcProj.appendLineOpen('</ItemGroup>');
 
-    additionalDeps = escapeForMsvcXML(";".join(objsToLink))
     outFile = (target["treeloc"] + "/" + target["target"]).replace("/","\\")
+    extraConfigLines = []
+    delayLoadDLLs = []
+    libPaths = []
+    extraArgs = []
+
+    # parse libraries and args from the build command
+    cmdline = target["build_command"]
+    if "expandlibs_exec" in cmdline:
+        # if it was called via expandlibs_exec, we'll have a "-- link" where the real command starts.  skip all that.
+        cmdline = cmdline[cmdline.find("-- link") + 7:]
+    tokens = (cmdline.split(" ")).__iter__()
+    midparse = False
+    try:
+        while True:
+            midparse = False
+            token = tokens.next()
+            utoken = token.upper()
+            midparse = True
+
+            m = re.match(r"(?i)^[-/]SUBSYSTEM:(.*)", token)
+            if m:
+                arg = m.group(1)
+                if arg == "WINDOWS":   arg = "Windows"
+                elif arg == "CONSOLE": arg = "Console"
+                elif arg == "NATIVE":  arg = "Native"
+                extraConfigLines.append("<SubSystem>%s</SubSystem>" % arg)
+                continue
+
+            m = re.match(r"(?i)^[-/]LARGEADDRESSAWARE(.*)", token)
+            if m:
+                arg = m.group(1)
+                if arg == ":NO": arg = "false"
+                else:            arg = "true"
+                extraConfigLines.append("<LargeAddressAware>%s</LargeAddressAware>" % arg)
+                continue
+
+            m = re.match(r"(?i)^[-/]NXCOMPAT(.*)", token)
+            if m:
+                arg = m.group(1)
+                if arg == ":NO": arg = "false"
+                else:            arg = "true"
+                extraConfigLines.append("<DataExecutionPrevention>%s</DataExecutionPrevention>" % arg)
+                continue
+
+            m = re.match(r"(?i)^[-/]SAFESEH(.*)", token)
+            if m:
+                arg = m.group(1)
+                if arg == ":NO": arg = "false"
+                else:            arg = "true"
+                extraConfigLines.append("<ImageHasSafeExceptionHandlers>%s</ImageHasSafeExceptionHandlers>" % arg)
+                continue
+
+            m = re.match(r"(?i)^[-/]DYNAMICBASE(.*)", token)
+            if m:
+                arg = m.group(1)
+                if arg == ":NO": arg = "false"
+                else:            arg = "true"
+                extraConfigLines.append("<RandomizedBaseAddress>%s</RandomizedBaseAddress>" % arg)
+                continue
+
+            m = re.match(r"(?i)^[-/]DELAYLOAD:(.*)", token)
+            if m:
+                arg = m.group(1)
+                delayLoadDLLs.append(arg)
+                continue
+
+            m = re.match(r"(?i)^[-/]LIBPATH:(.*)", token)
+            if m:
+                arg = m.group(1)
+                if arg.startswith("\"") and arg.endswith("\""): arg = arg[1:-1]
+                libPaths.append(makeMsvcPath(target["treeloc"], arg))
+                continue
+
+            m = re.match(r"(?i)^[-/]DEF:(.*)", token)
+            if m:
+                arg = m.group(1)
+                path = makeMsvcPath(target["treeloc"], arg)
+                extraConfigLines.append("<ModuleDefinitionFile>%s</ModuleDefinitionFile>" % path)
+                continue
+
+            m = re.match(r"(?i)^[-/]PDB:(.*)", token)
+            if m:
+                arg = m.group(1)
+                path = makeMsvcPath(target["treeloc"], arg)
+                extraConfigLines.append("<ProgramDatabaseFile>%s</ProgramDatabaseFile>" % path)
+                continue
+
+            m = re.match(r"(?i)^[-/]RELEASE", token)
+            if m:
+                extraConfigLines.append("<SetChecksum>true</SetChecksum>")
+                continue
+
+            if token.lower().endswith(".lib"):
+                # if it's not absolute, add it to the extra libs list
+                # otherwise it's something that will get expanded
+                tokenpath = os.path.join(target["treeloc"], token)
+                if os.path.exists(tokenpath):
+                    # directory-relative library
+                    objsToLink.append(makeMsvcPath(target["treeloc"], token))
+                elif not ("/" in token or "\\" in token):
+                    # global library
+                    objsToLink.append(token)
+                elif not os.path.exists(tokenpath + ".desc"):
+                    print "Warning: non-local lib, but it doesn't exist and no .desc file: %s for target %s" % (token, target["target"])
+                continue
+
+            if utoken.startswith("-MANIFEST") and utoken is not "-MANIFEST:NO":
+                print "Warning: Saw %s flag, but we unilaterally disable manifests, fix hacky!" % token
+
+            # These had better be set in the global project settings properly
+            if utoken.startswith("-DLL") or utoken.startswith("-MACHINE"):
+                continue
+            if utoken.startswith("-DEBUG") or utoken.startswith("-OUT:"):
+                continue
+
+            if utoken.startswith("-NOLOGO"):
+                continue
+
+            # Hack: Skip these; these are objs that are directly linked in to
+            # the library from the current dir (e.g. they didn't come from
+            # an import lib).  We should double check that we're already
+            # linking them and complain if we're not
+            if utoken.endswith(".RES") or utoken.endswith(".OBJ"):
+                continue
+
+            extraArgs.append(token)
+    except StopIteration:
+        if midparse:
+            print >>sys.stderr, "Failed parsing msvc link flags, target %s" % target["target"]
+            sys.exit(1)
+
+
     #if outFile.endswith(".dll"):
     #    outFile = outFile[:-4]
+
+    libPaths.append("$(LibraryPath)")
+
+    msvcProj.appendLineOpen('<PropertyGroup Condition="\'$(Configuration)|$(Platform)\'==\'GeckoImported|%s\'">' % msvcPlatform)
+    msvcProj.appendLine('<LinkIncremental>true</LinkIncremental>')
+    msvcProj.appendLine('<LibraryPath>%s</LibraryPath>' % (";".join(libPaths)))
+    # we may need to change this if we ever see a manifest
+    msvcProj.appendLine('<GenerateManifest>false</GenerateManifest>')
+    msvcProj.appendLineClose('</PropertyGroup>')
+
     msvcProj.appendLineOpen('<ItemDefinitionGroup>')
     msvcProj.appendLineOpen('<Link>')
     msvcProj.appendLine('<GenerateDebugInformation>true</GenerateDebugInformation>')
     msvcProj.appendLine('<OutputFile>%s</OutputFile>' % outFile)
-    if additionalDeps != "":
-        msvcProj.appendLine('<AdditionalDependencies>%s</AdditionalDependencies>' % additionalDeps)
+    msvcProj.appendLine('<ImportLibrary>%s</ImportLibrary>' % outFile.replace(".dll", ".lib"))
+    msvcProj.appendLine('<AdditionalDependencies>%s</AdditionalDependencies>' % ";".join(objsToLink))
+    for config in extraConfigLines:
+        msvcProj.appendLine(config)
+    if delayLoadDLLs:
+        msvcProj.appendLine('<DelayLoadDLLs>%s</DelayLoadDLLs>' % ";".join(delayLoadDLLs))
+
+    extraArgStr = " ".join(extraArgs).strip()
+    if extraArgStr:
+        print "Leftover Additional Args for %s: %s" % (target["target"], extraArgStr)
+        msvcProj.appendLine('<AdditionalOptions>%s</AdditionalOptions>' % extraArgStr)
+
+    # don't generate a /TLBID arg for us
+    msvcProj.appendLine('<TypeLibraryResourceID></TypeLibraryResourceID>')
     msvcProj.appendLineClose('</Link>')
+
+    msvcProj.appendLineOpen('<PostBuildEvent>')
+    msvcProj.appendLine('<Command>copy %s dist\\lib\ncopy %s dist\\bin</Command>' % (outFile.replace(".dll", ".lib"), outFile))
+    msvcProj.appendLineClose('</PostBuildEvent>')
+
     msvcProj.appendLineClose('</ItemDefinitionGroup>')
             
 
@@ -363,7 +567,12 @@ def genMsvcSolution(tree_root, projects):
     solution.append('Microsoft Visual Studio Solution File, Format Version 11.00')
     solution.append('# Visual Studio 2010')
     for project in projects:
-        solution.append(('Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "%s", "%s.vcxproj", "{CDF26D50-0415-4FCF-8498-9FFB7592413A}"') % (project, project))
+        # The 8BC9... uuid here is magic(a type? global solution?) and is constant
+        solution.append(('Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "%s", "%s.vcxproj", "{%s}"') % (project["path"], project["path"], project["guid"]))
+# TODO: to say that this project depends on others:
+#		ProjectSection(ProjectDependencies) = postProject
+#			{other_project_guid} = {other_project_guid}
+#		EndProjectSection
         solution.append('EndProject')
 
     solution.append('Global')
@@ -371,8 +580,9 @@ def genMsvcSolution(tree_root, projects):
     solution.append('\t\tGeckoImported|%s = GeckoImported|%s' % (msvcPlatform, msvcPlatform))
     solution.append('\tEndGlobalSection')
     solution.append('\tGlobalSection(ProjectConfigurationPlatforms) = postSolution')
-    solution.append('\t\t{CDF26D50-0415-4FCF-8498-9FFB7592413A}.GeckoImported|%s.ActiveCfg = GeckoImported|%s' % (msvcPlatform, msvcPlatform))
-    solution.append('\t\t{CDF26D50-0415-4FCF-8498-9FFB7592413A}.GeckoImported|%s.Build.0 = GeckoImported|%s' % (msvcPlatform, msvcPlatform))
+    for project in projects:
+        solution.append('\t\t{%s}.GeckoImported|%s.ActiveCfg = GeckoImported|%s' % (project["guid"], msvcPlatform, msvcPlatform))
+        solution.append('\t\t{%s}.GeckoImported|%s.Build.0 = GeckoImported|%s' % (project["guid"], msvcPlatform, msvcPlatform))
     solution.append('\tEndGlobalSection')
     solution.append('\tGlobalSection(SolutionProperties) = preSolution')
     solution.append('\t\tHideSolutionNode = FALSE')
@@ -396,17 +606,33 @@ if __name__ == "__main__":
     for line in conffile:
         m = re.match(r"([A-Z0-9_]+) *= *(.*)", line.strip())
         if m:
-            if m.groups(1)[0] == "CPU_ARCH" and m.groups(1)[1] == "x86_64":
+            arg = m.group(1)
+            val = m.group(2)
+            if arg == "CPU_ARCH" and val == "x86_64":
                 is64Bit = True
                 msvcPlatform = "x64"
+            elif arg == "CC_VERSION":
+                if val.find("16.") == 0:
+                    msvcVersion = "2010"
+                elif val.find("17.") == 0:
+                    msvcVersion = "2012"
+                elif val.find("18.") == 0:
+                    msvcVersion = "2013"
 
     hackyMap = readhacky(tree_base)
 
+    # generate guids for each project
+    for targetName in hackyMap:
+        if targetName.endswith(".dll"):
+            hackyMap[targetName]["projectGuid"] = str(uuid.uuid1())
+
+    # then go through them all
     solutionProjects = []
     for targetName in hackyMap:
         if targetName.endswith(".dll"):
+            #if not targetName.endswith("gkmedias.dll"): continue
             print "Generating: " + targetName
-            solutionProjects.append(os.path.basename(targetName).encode("utf-8"))
+            solutionProjects.append({ "guid": hackyMap[targetName]["projectGuid"], "path": os.path.basename(targetName).encode("utf-8") })
             genMsvc(tree_base, hackyMap, hackyMap[targetName])
 
     genMsvcSolution(tree_base, solutionProjects)
