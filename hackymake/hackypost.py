@@ -188,10 +188,12 @@ def genMsvcClCompile(msvcProj, tree_root, hackyMap, target):
     objName = makeMsvcPath(target["treeloc"], target["targetfile"])
 
     defines = []
+    quotedDefines = []
     includeDirs = []
     extraConfigLines = []
     extraArgs = []
     disabledWarnings = []
+    enabledWarnings = []
 
     # We don't do much with quoting, only hangling it where
     # we must -- specifically in -D flags.  That will break
@@ -226,7 +228,7 @@ def genMsvcClCompile(msvcProj, tree_root, hackyMap, target):
                     if defval.startswith("'\"") and defval.endswith("\"'"):
                         arg = defname + "=\"\\\"" + defval[2:-2] + "\\\"\""
 
-                    extraArgs.append("/D " + arg)
+                    quotedDefines.append("/D " + arg)
                 else:
                     defines.append(arg)
                 continue
@@ -322,6 +324,12 @@ def genMsvcClCompile(msvcProj, tree_root, hackyMap, target):
                 disabledWarnings.append(arg)
                 continue
 
+            m = re.match(r"[-/]we([0-9]+)", token)
+            if m:
+                arg = m.group(1)
+                enabledWarnings.append(arg)
+                continue
+
             m = re.match(r"(?i)[-/]nologo", token)
             if m:
                 continue
@@ -346,10 +354,16 @@ def genMsvcClCompile(msvcProj, tree_root, hackyMap, target):
 
     extraArgStr = " ".join(extraArgs).strip()
     if extraArgStr:
+        print "EXTRA CC ARGS for %s: %s" % (target["target"], extraArgStr)
+    if quotedDefines:
+        extraArgStr = " ".join(quotedDefines) + " " + extraArgStr
+    if extraArgStr:
         msvcProj.appendLine('<AdditionalOptions>%s %%(AdditionalOptions)</AdditionalOptions>' % escapeForMsvcXML(extraArgStr))
 
     if disabledWarnings:
         msvcProj.appendLine('<DisableSpecificWarnings>%s</DisableSpecificWarnings>' % ";".join(disabledWarnings))
+    if enabledWarnings:
+        msvcProj.appendLine('<EnableSpecificWarnings>%s</EnableSpecificWarnings>' % ";".join(enabledWarnings))
 
     msvcProj.appendLineClose('</ClCompile>')
 
@@ -381,6 +395,7 @@ def genMsvcTargetCompile(msvcProj, tree_root, hackyMap, target):
     delayLoadDLLs = []
     libPaths = []
     extraArgs = []
+    importLibrary = None
 
     # parse libraries and args from the build command
     cmdline = target["build_command"]
@@ -469,22 +484,13 @@ def genMsvcTargetCompile(msvcProj, tree_root, hackyMap, target):
                 extraConfigLines.append("<SetChecksum>true</SetChecksum>")
                 continue
 
-            if token.lower().endswith(".lib"):
-                # if it's not absolute, add it to the extra libs list
-                # otherwise it's something that will get expanded
-                tokenpath = os.path.join(target["treeloc"], token)
-                if os.path.exists(tokenpath):
-                    # directory-relative library
-                    objsToLink.append(makeMsvcPath(target["treeloc"], token))
-                elif not ("/" in token or "\\" in token):
-                    # global library
-                    objsToLink.append(token)
-                elif not os.path.exists(tokenpath + ".desc"):
-                    print "Warning: non-local lib, but it doesn't exist and no .desc file: %s for target %s" % (token, target["target"])
-                continue
-
             if utoken.startswith("-MANIFEST") and utoken is not "-MANIFEST:NO":
                 print "Warning: Saw %s flag, but we unilaterally disable manifests, fix hacky!" % token
+
+            m = re.match(r"(?i)^[-/]IMPLIB:(.*)", token)
+            if m:
+                importLibrary = m.group(1)
+                continue
 
             # These had better be set in the global project settings properly
             if utoken.startswith("-DLL") or utoken.startswith("-MACHINE"):
@@ -493,6 +499,29 @@ def genMsvcTargetCompile(msvcProj, tree_root, hackyMap, target):
                 continue
 
             if utoken.startswith("-NOLOGO"):
+                continue
+
+            if utoken.endswith(".LIB") or utoken.endswith(".LIB\""):
+                if utoken.startswith("\"") and utoken.endswith("\""):
+                    token = token[1:-1]
+                    utoken = utoken[1:-1]
+                # if it's not absolute, add it to the extra libs list
+                # otherwise it's something that will get expanded
+                tokenpath = os.path.join(target["treeloc"], token)
+                if os.path.exists(tokenpath):
+                    relpath = makeMsvcPath(target["treeloc"], token)
+                    # If relpath starts with a '.', that means it's outside of the objdir.
+                    # Thus, it should get treated as global and we should use its original name.
+                    if relpath[0] != '.':
+                        # objdir-relative library
+                        objsToLink.append(relpath)
+                    else:
+                        objsToLink.append(os.path.abspath(token))
+                elif not ("/" in token or "\\" in token):
+                    # global library with no path, will be searched for in library search path
+                    objsToLink.append(token)
+                elif not os.path.exists(tokenpath + ".desc"):
+                    print "Warning: non-local lib, but it doesn't exist and no .desc file: %s for target %s" % (token, target["target"])
                 continue
 
             # Hack: Skip these; these are objs that are directly linked in to
@@ -512,6 +541,11 @@ def genMsvcTargetCompile(msvcProj, tree_root, hackyMap, target):
     #if outFile.endswith(".dll"):
     #    outFile = outFile[:-4]
 
+    if importLibrary:
+        importLibrary = makeMsvcPath(target["treeloc"], importLibrary)
+    else:
+        importLibrary = makeMsvcPath(target["treeloc"], target["target"].replace(".dll", ".lib"))
+
     libPaths.append("$(LibraryPath)")
 
     msvcProj.appendLineOpen('<PropertyGroup Condition="\'$(Configuration)|$(Platform)\'==\'GeckoImported|%s\'">' % msvcPlatform)
@@ -525,7 +559,7 @@ def genMsvcTargetCompile(msvcProj, tree_root, hackyMap, target):
     msvcProj.appendLineOpen('<Link>')
     msvcProj.appendLine('<GenerateDebugInformation>true</GenerateDebugInformation>')
     msvcProj.appendLine('<OutputFile>%s</OutputFile>' % outFile)
-    msvcProj.appendLine('<ImportLibrary>%s</ImportLibrary>' % outFile.replace(".dll", ".lib"))
+    msvcProj.appendLine('<ImportLibrary>%s</ImportLibrary>' % importLibrary)
     msvcProj.appendLine('<AdditionalDependencies>%s</AdditionalDependencies>' % ";".join(objsToLink))
     for config in extraConfigLines:
         msvcProj.appendLine(config)
