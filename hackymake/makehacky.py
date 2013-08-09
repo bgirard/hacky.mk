@@ -165,7 +165,7 @@ def emit_common(hackyfile, treeloc, target, depfiles, srcfiles, build_command, e
 
 # This is used for generic rules, everything other than compilation
 # These likely won't have any repeated arguments or anything similar.
-def makehacky(depthstr, dotpath, target, deps, build_command, extra_outputs, ppfile = None):
+def makehacky(depthstr, dotpath, target, deps, build_command, extra_outputs = "", ppfile = None):
     computepaths(depthstr, dotpath, target)
     hackyfile = openhacky()
 
