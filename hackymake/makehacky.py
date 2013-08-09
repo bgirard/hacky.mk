@@ -266,7 +266,7 @@ def makeinstall(depthstr, category, source, destdir):
     hackyfile.close()
 
 # This is used for Win32 binaries, and is different from unixish binaries (see makeprogram)
-def makeprogramwin32(depthstr, dotpath, target, ldflags, objfiles, libs, link_pdbfile, expand_ld):
+def makeprogramwin32(depthstr, dotpath, target, ldflags, objfiles, libs, link_pdbfile, expand_ld = ""):
     computepaths(depthstr, dotpath, target)
     hackyfile = openhacky()
 
@@ -274,6 +274,7 @@ def makeprogramwin32(depthstr, dotpath, target, ldflags, objfiles, libs, link_pd
     # any of ldflags, objfiles, libs could have libs or objs.
     # One assumption: no spaces in any arguments.
     def extract_lib_deps(arg):
+        print "ARGS: " + str(arg)
         tokens = re.split(r"\s+", arg).__iter__()
         dep_libs = []
         external_libs = []
@@ -286,7 +287,7 @@ def makeprogramwin32(depthstr, dotpath, target, ldflags, objfiles, libs, link_pd
                 break
 
             # skip things that are arguments
-            if token[0] in ['-', '/']:
+            if len(token) == 0 or token[0] in ['-', '/']:
                 rest.append(token)
                 continue
 
