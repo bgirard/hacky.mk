@@ -233,6 +233,19 @@ def genMsvcClCompile(msvcProj, tree_root, hackyMap, target):
                     defines.append(arg)
                 continue
 
+            m = re.match(r"^[-/]U(.*)", token)
+            if m:
+                arg = m.group(1) or tokens.next()
+                while True:
+                    try:
+                        defines.remove(arg)
+                    except ValueError:
+                        break # Keep removing until there are no more elements in the list
+
+                # We don't support undefining a quotedDefine
+
+                continue
+
             m = re.match(r"[-/]I(.*)", token)
             if m:
                 path = m.group(1) or tokens.next()
