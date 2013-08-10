@@ -286,8 +286,11 @@ def makeprogramwin32(depthstr, dotpath, target, ldflags, objfiles, libs, link_pd
             except StopIteration:
                 break
 
+            if len(token) == 0:
+                continue
+
             # skip things that are arguments
-            if len(token) == 0 or token[0] in ['-', '/']:
+            if token[0] in ['-', '/']:
                 rest.append(token)
                 continue
 
@@ -330,6 +333,8 @@ def makeprogramwin32(depthstr, dotpath, target, ldflags, objfiles, libs, link_pd
     build_command = "%s -NOLOGO -OUT:%s -PDB:%s %s %s %s %s" % (expand_ld, target, link_pdbfile, " ".join(other_args), objfiles, " ".join(dep_libs), " ".join(external_libs))
 
     depfiles = re.split(r"\s+", objfiles)
+    while '' in depfiles:
+        depfiles.remove('')
     depfiles = map(relpath, depfiles + dep_libs)
 
     extra_info = {
