@@ -286,7 +286,7 @@ def makeprogramwin32(depthstr, dotpath, target, ldflags, objfiles, libs, link_pd
             except StopIteration:
                 break
 
-            if len(token) == 0:
+            if not token:
                 continue
 
             # skip things that are arguments
@@ -333,8 +333,6 @@ def makeprogramwin32(depthstr, dotpath, target, ldflags, objfiles, libs, link_pd
     build_command = "%s -NOLOGO -OUT:%s -PDB:%s %s %s %s %s" % (expand_ld, target, link_pdbfile, " ".join(other_args), objfiles, " ".join(dep_libs), " ".join(external_libs))
 
     depfiles = re.split(r"\s+", objfiles)
-    while '' in depfiles:
-        depfiles.remove('')
     depfiles = map(relpath, depfiles + dep_libs)
 
     extra_info = {
@@ -360,6 +358,7 @@ if __name__ == "__main__":
     # we use "^^" as a " char to avoid weird quoting problems, e.g.
     # if someone's already escaping " via \"
     args = map(lambda s: s.replace('^^', '"'), args)
+    args = map(str.strip, args)
 
     backendsStr = os.getenv("HACKY_BACKEND") or "all"
     if backendsStr is "all":
