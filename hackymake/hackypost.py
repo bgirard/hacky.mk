@@ -236,7 +236,7 @@ def genMsvcClCompileGroup(msvcProj, tree_root, hackyMap, target, clCompileMap):
                     if defval.startswith("'\"") and defval.endswith("\"'"):
                         arg = defname + "=\"\\\"" + defval[2:-2] + "\\\"\""
 
-                    quotedDefines.append("/D " + arg)
+                    quotedDefines.append("/D " + arg.replace('"', '\\"'))
                 else:
                     defines.append(arg)
                 continue
@@ -366,6 +366,9 @@ def genMsvcClCompileGroup(msvcProj, tree_root, hackyMap, target, clCompileMap):
 
     defines.append("%(PreprocessorDefinitions)")
     includeDirs.append("%(AdditionalIncludeDirectories)")
+
+    # This must be included after because we expect the system to be at the end of the search path
+    includeDirs.append(os.getenv("INCLUDE"))
 
     extraArgStr = " ".join(extraArgs).strip()
 
