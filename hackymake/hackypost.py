@@ -183,7 +183,14 @@ def makeMsvcPath(treeloc, name, basepath=None):
 def unescapeQuotesOnce(arg):
     return arg.replace("\\\"", "\"").replace("\\\\", "\\")
 
-def genMsvcClCompile(msvcProj, tree_root, hackyMap, target):
+def genMsvcClCompile(msvcProj, tree_root, clCompileMap):
+    for key in clCompileMap:
+        msvcProj.appendLineOpen('<ClCompile Include="%s">' % escapeForMsvcXML(";".join(clCompileMap[key]["files"])))
+        for xmlLine in clCompileMap[key]["xmlLines"]:
+            msvcProj.appendLine(xmlLine)
+        msvcProj.appendLineClose('</ClCompile>')
+
+def genMsvcClCompileGroup(msvcProj, tree_root, hackyMap, target, clCompileMap):
     srcName = makeMsvcPath(target["treeloc"], target["srcfiles"][0])
     objName = makeMsvcPath(target["treeloc"], target["targetfile"])
 
@@ -198,7 +205,8 @@ def genMsvcClCompile(msvcProj, tree_root, hackyMap, target):
     # We don't do much with quoting, only hangling it where
     # we must -- specifically in -D flags.  That will break
     # if those args have embedded spaces in them.
-    tokens = (target["cflags"].split(" ")).__iter__()
+    import shlex
+    tokens = (shlex.split(str(target["cflags"]))).__iter__()
     midparse = False
     try:
         while True:
@@ -289,7 +297,8 @@ def genMsvcClCompile(msvcProj, tree_root, hackyMap, target):
             if m:
                 path = m.group(1) or tokens.next()
                 path = makeMsvcPath(target["treeloc"], path)
-                extraConfigLines.append("<ProgramDataBaseFileName>%s</ProgramDataBaseFileName>" % (path))
+                # Disable this for now because we don't want to override the PDBs
+                #extraConfigLines.append("<ProgramDataBaseFileName>%s</ProgramDataBaseFileName>" % (path))
                 continue
 
             m = re.match(r"[-/]FI(.*)", token)
@@ -358,27 +367,37 @@ def genMsvcClCompile(msvcProj, tree_root, hackyMap, target):
     defines.append("%(PreprocessorDefinitions)")
     includeDirs.append("%(AdditionalIncludeDirectories)")
 
-    msvcProj.appendLineOpen('<ClCompile Include="%s">' % escapeForMsvcXML(srcName))
-    msvcProj.appendLine('<ObjectFileName>%s</ObjectFileName>' % escapeForMsvcXML(objName))
-    msvcProj.appendLine('<PreprocessorDefinitions>%s</PreprocessorDefinitions>' % escapeForMsvcXML(";".join(defines)))
-    msvcProj.appendLine('<AdditionalIncludeDirectories>%s</AdditionalIncludeDirectories>' % escapeForMsvcXML(";".join(includeDirs)))
-    for config in extraConfigLines:
-        msvcProj.appendLine(config)
-
     extraArgStr = " ".join(extraArgs).strip()
+
+    clCompileHash = {}
+    clCompileHash["files"] = [srcName]
+    clCompileHash["xmlLines"] = []
+
+    #clCompileHash.xmlLines.appen('<ObjectFileName>%s</ObjectFileName>' % escapeForMsvcXML(objName))
+    clCompileHash["xmlLines"].append('<PreprocessorDefinitions>%s</PreprocessorDefinitions>' % escapeForMsvcXML(";".join(defines)))
+    clCompileHash["xmlLines"].append('<AdditionalIncludeDirectories>%s</AdditionalIncludeDirectories>' % escapeForMsvcXML(";".join(includeDirs)))
+    clCompileHash["xmlLines"].append('<MultiProcessorCompilation>true</MultiProcessorCompilation>')
+
+    for config in extraConfigLines:
+        clCompileHash["xmlLines"].append(config)
+
     if extraArgStr:
         print "EXTRA CC ARGS for %s: %s" % (target["target"], extraArgStr)
     if quotedDefines:
         extraArgStr = " ".join(quotedDefines) + " " + extraArgStr
     if extraArgStr:
-        msvcProj.appendLine('<AdditionalOptions>%s %%(AdditionalOptions)</AdditionalOptions>' % escapeForMsvcXML(extraArgStr))
+        clCompileHash["xmlLines"].append('<AdditionalOptions>%s %%(AdditionalOptions)</AdditionalOptions>' % escapeForMsvcXML(extraArgStr))
 
     if disabledWarnings:
-        msvcProj.appendLine('<DisableSpecificWarnings>%s</DisableSpecificWarnings>' % ";".join(disabledWarnings))
+        clCompileHash["xmlLines"].append('<DisableSpecificWarnings>%s</DisableSpecificWarnings>' % ";".join(disabledWarnings))
     if enabledWarnings:
-        msvcProj.appendLine('<EnableSpecificWarnings>%s</EnableSpecificWarnings>' % ";".join(enabledWarnings))
+        clCompileHash["xmlLines"].append('<EnableSpecificWarnings>%s</EnableSpecificWarnings>' % ";".join(enabledWarnings))
 
-    msvcProj.appendLineClose('</ClCompile>')
+    key = str(clCompileHash["xmlLines"])
+    if key in clCompileMap:
+        clCompileMap[key]["files"].append(srcName)
+    else: # insert it
+        clCompileMap[key] = clCompileHash
 
     msvcProj.filtersLineOpen('<ClCompile Include="%s">' % escapeForMsvcXML(srcName))
     msvcProj.filtersLine('<Filter>%s</Filter>' % escapeForMsvcXML(folder))
@@ -388,12 +407,12 @@ def genMsvcClCompile(msvcProj, tree_root, hackyMap, target):
 def genMsvcTargetCompile(msvcProj, tree_root, hackyMap, target):
     objdeps = target["ppDeps"]
     objsToLink = [] # Object
+    clCompileMap = {}
 
-    msvcProj.appendLineOpen('<ItemGroup>');
     for objdep in objdeps:
         if objdep in hackyMap and "srcfiles" in hackyMap[objdep] and hackyMap[objdep]["srcfiles"]:
             #print hackyMap[objdep]["treeloc"] + "/" + hackyMap[objdep]["srcfiles"][0]
-            genMsvcClCompile(msvcProj, tree_root, hackyMap, hackyMap[objdep])
+            genMsvcClCompileGroup(msvcProj, tree_root, hackyMap, hackyMap[objdep], clCompileMap)
         elif objdep.endswith(".desc"):
             #print "Skipping desc: " + objdep
             pass
@@ -401,6 +420,9 @@ def genMsvcTargetCompile(msvcProj, tree_root, hackyMap, target):
             print "Warning: Don't have srcdeps for: " + objdep.replace("\n","") + ", wont be updated with msbuild"
             # append it here, and hope that it matches the extra .obj/.res in the command line
             objsToLink.append(objdep.replace("\n",""))
+
+    msvcProj.appendLineOpen('<ItemGroup>');
+    genMsvcClCompile(msvcProj, tree_root, clCompileMap)
     msvcProj.appendLineOpen('</ItemGroup>');
 
     outFile = (target["treeloc"] + "/" + target["target"]).replace("/","\\")
