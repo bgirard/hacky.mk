@@ -201,6 +201,7 @@ def genMsvcClCompileGroup(msvcProj, tree_root, hackyMap, target, clCompileMap):
     extraArgs = []
     disabledWarnings = []
     enabledWarnings = []
+    exceptionHandling = "false"
 
     # We don't do much with quoting, only hangling it where
     # we must -- specifically in -D flags.  That will break
@@ -356,6 +357,21 @@ def genMsvcClCompileGroup(msvcProj, tree_root, hackyMap, target, clCompileMap):
             if m:
                 continue
 
+            m = re.match(r"(?i)[-/]EHsc", token)
+            if m:
+                exceptionHandling = "Sync"
+                continue
+
+            m = re.match(r"(?i)[-/]EHs", token)
+            if m:
+                exceptionHandling = "SyncCThrow"
+                continue
+
+            m = re.match(r"(?i)[-/]EHa", token)
+            if m:
+                exceptionHandling = "ASync"
+                continue
+
             extraArgs.append(token)
     except StopIteration:
         if midparse:
@@ -384,6 +400,8 @@ def genMsvcClCompileGroup(msvcProj, tree_root, hackyMap, target, clCompileMap):
     for config in extraConfigLines:
         clCompileHash["xmlLines"].append(config)
 
+    if exceptionHandling != "false":
+        msvcProj.appendLine('<ExceptionHandling>%s</ExceptionHandling>' % exceptionHandling);
     if extraArgStr:
         print "EXTRA CC ARGS for %s: %s" % (target["target"], extraArgStr)
     if quotedDefines:
