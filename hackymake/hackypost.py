@@ -434,6 +434,7 @@ def genMsvcTargetCompile(msvcProj, tree_root, hackyMap, target):
     libPaths = []
     extraArgs = []
     importLibrary = None
+    additionalLinkOptions = None
 
     # parse libraries and args from the build command
     cmdline = target["build_command"]
@@ -495,6 +496,12 @@ def genMsvcTargetCompile(msvcProj, tree_root, hackyMap, target):
             if m:
                 arg = m.group(1)
                 delayLoadDLLs.append(arg)
+                continue
+
+            m = re.match(r"(?i)^[-/]OPT:REF", token)
+            if m:
+                # Visual Studio really uses the additionalOptions for this
+                additionalLinkOptions = "-OPT:REF"
                 continue
 
             m = re.match(r"(?i)^[-/]LIBPATH:(.*)", token)
@@ -600,6 +607,8 @@ def genMsvcTargetCompile(msvcProj, tree_root, hackyMap, target):
     msvcProj.appendLine('<OutputFile>%s</OutputFile>' % outFile)
     msvcProj.appendLine('<ImportLibrary>%s</ImportLibrary>' % importLibrary)
     msvcProj.appendLine('<AdditionalDependencies>%s</AdditionalDependencies>' % ";".join(objsToLink))
+    if additionalLinkOptions:
+        msvcProj.appendLine('<AdditionalOptions>%s</AdditionalOptions>' % " ".join(additionalLinkOptions))
     msvcProj.appendLine('<AdditionalLibraryDirectories>%s</AdditionalLibraryDirectories>' % os.getenv("LIB"))
 
     for config in extraConfigLines:
