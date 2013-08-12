@@ -440,7 +440,8 @@ def genMsvcTargetCompile(msvcProj, tree_root, hackyMap, target):
     if "expandlibs_exec" in cmdline:
         # if it was called via expandlibs_exec, we'll have a "-- link" where the real command starts.  skip all that.
         cmdline = cmdline[cmdline.find("-- link") + 7:]
-    tokens = (cmdline.split(" ")).__iter__()
+    import shlex
+    tokens = (shlex.split(str(cmdline))).__iter__()
     midparse = False
     try:
         while True:
@@ -599,6 +600,8 @@ def genMsvcTargetCompile(msvcProj, tree_root, hackyMap, target):
     msvcProj.appendLine('<OutputFile>%s</OutputFile>' % outFile)
     msvcProj.appendLine('<ImportLibrary>%s</ImportLibrary>' % importLibrary)
     msvcProj.appendLine('<AdditionalDependencies>%s</AdditionalDependencies>' % ";".join(objsToLink))
+    msvcProj.appendLine('<AdditionalLibraryDirectories>%s</AdditionalLibraryDirectories>' % os.getenv("LIB"))
+
     for config in extraConfigLines:
         msvcProj.appendLine(config)
     if delayLoadDLLs:
