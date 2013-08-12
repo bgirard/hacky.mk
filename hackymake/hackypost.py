@@ -376,7 +376,7 @@ def genMsvcClCompileGroup(msvcProj, tree_root, hackyMap, target, clCompileMap):
     clCompileHash["files"] = [srcName]
     clCompileHash["xmlLines"] = []
 
-    #clCompileHash.xmlLines.appen('<ObjectFileName>%s</ObjectFileName>' % escapeForMsvcXML(objName))
+    clCompileHash["xmlLines"].append('<ObjectFileName>%s</ObjectFileName>' % escapeForMsvcXML(objName))
     clCompileHash["xmlLines"].append('<PreprocessorDefinitions>%s</PreprocessorDefinitions>' % escapeForMsvcXML(";".join(defines)))
     clCompileHash["xmlLines"].append('<AdditionalIncludeDirectories>%s</AdditionalIncludeDirectories>' % escapeForMsvcXML(";".join(includeDirs)))
     clCompileHash["xmlLines"].append('<MultiProcessorCompilation>true</MultiProcessorCompilation>')
