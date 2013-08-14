@@ -3,6 +3,7 @@
 import sys
 import re
 import os
+from cStringIO import StringIO
 from tokenize import tokenize, untokenize, NUMBER, STRING, NAME, OP
 
 DEBUG = False
@@ -18,6 +19,7 @@ objroot = None
 hackydir = None
 treeloc = None
 hackyfilename = None
+hackyppfilename = None
 
 def gethackyext():
     global backend
@@ -32,7 +34,7 @@ def gethackyext():
         sys.exit(1)
 
 def computepaths(depthstr, dotpath, target):
-    global makehackypy, objroot, hackydir, treeloc, hackyfilename
+    global makehackypy, objroot, hackydir, treeloc, hackyfilename, hackyppfilename
     objroot = os.path.abspath(os.path.join(dotpath, depthstr)).replace("\\", "/")
     hackydir = os.path.join(objroot, ".hacky").replace("\\", "/")
 
@@ -44,6 +46,7 @@ def computepaths(depthstr, dotpath, target):
     if hackybase == "._":
         hackybase = ""
     hackyfilename = hackybase + os.path.basename(target) + gethackyext()
+    hackyppfilename = hackybase + os.path.basename(target) + ".hacky.pp"
 
     # and fix up makehackypy
     makehackypy = os.path.relpath(makehackypy, dotpath).replace("\\", "/")
@@ -52,13 +55,21 @@ def computepaths(depthstr, dotpath, target):
 # an objroot in objroot, generate a new file in outfile that contains
 # relative-to-objroot dependencies
 def abspp(ppfile, outfile, targetdir, targetname):
-    fpin = file(ppfile, "r")
+    if not os.path.exists(os.path.dirname(outfile)): os.mkdir(os.path.dirname(outfile))
+
+    try:
+        fpin = file(ppfile, "r")
+    except:
+        # if it doesn't exist, pretend it's empty
+        fpin = StringIO("")
+
     if outfile is None:
         fpout = sys.stdout
     else:
         fpout = file(outfile, "w")
+
     deps = []
-    for line in fpin.readlines():
+    for line in fpin:
         # strip out the dep target; make sure to handle "foo : bar" (note extra space before the : -- some crap
         # generates this)
         # Damn windows, we also need to handle 'c:/foo/bar : foo'
@@ -104,9 +115,10 @@ def openhacky():
     global hackyfilename
     # make the toplevel .hacky if it doesn't exist
     if not os.path.exists(hackydir): os.mkdir(hackydir)
+    if not os.path.exists(os.path.join(hackydir, backend)): os.mkdir(os.path.join(hackydir, backend))
 
-    hackyfile = file(os.path.join(hackydir, hackyfilename), "w")
-    #print >>sys.stderr, ("Open '%s'" % os.path.join(hackydir, hackyfilename))
+    hackyfile = file(os.path.join(hackydir, backend, hackyfilename), "w")
+    #print >>sys.stderr, ("Open '%s'" % os.path.join(hackydir, backend, hackyfilename))
     return hackyfile
 
 def emit_common(hackyfile, treeloc, target, depfiles, srcfiles, build_command, extra_outputs, depthstr, dotpath, ppfile = None, extra_info = []):
@@ -124,7 +136,7 @@ def emit_common(hackyfile, treeloc, target, depfiles, srcfiles, build_command, e
         # escape out the build_command
         build_command = build_command.replace("\\", "\\\\").replace("\"","\\\"")
         if ppfile:
-            print >>hackyfile, "  depfile = %s" % (".hacky/" + hackyfilename + ".pp")
+            print >>hackyfile, "  depfile = .hacky/pp/%s" % hackyppfilename
             build_command = build_command + " && ${PYTHON} %s pp %s %s %s %s" % (makehackypy, depthstr, dotpath, target, ppfile)
         print >>hackyfile, "  buildcommand = bash -c \"cd %s && %s\"" % (treeloc, build_command)
 
@@ -137,7 +149,7 @@ def emit_common(hackyfile, treeloc, target, depfiles, srcfiles, build_command, e
 
         print >>hackyfile, "original::"
         print >>hackyfile, "\tcd %s && rm -f %s && $(MAKE) %s" % (treeloc, targetfile, targetfile)
-        print >>hackyfile, "%s: %s/Makefile" % (os.path.join(hackydir, hackyfilename), treeloc)
+        print >>hackyfile, "%s: %s/Makefile" % (os.path.join(hackydir, "make", hackyfilename), treeloc)
         print >>hackyfile, "\tcd %s && $(MAKE) %s" % (treeloc, targetfile)
 
     if backend == "hacky":
@@ -158,10 +170,11 @@ def emit_common(hackyfile, treeloc, target, depfiles, srcfiles, build_command, e
            json_data[key] = extra_info[key]
         print >>hackyfile, json.dumps(json_data)
 
-    # if a ppfile is given, process it
-    # NOTE: we don't ever include this pp file; it gets included in the toplevel hacky.mk!
-    if ppfile:
-        abspp(ppfile, os.path.join(hackydir, hackyfilename + ".pp"), treeloc, targetfile)
+        # if a ppfile is given, process it
+        # NOTE: we don't ever include this pp file; it gets included in the toplevel hacky.mk!
+        # NOTE: we only generate this for the "hacky" backend, but everything depends on it!
+        if ppfile:
+            abspp(ppfile, os.path.join(hackydir, "pp", hackyppfilename), treeloc, targetfile)
 
 # This is used for generic rules, everything other than compilation
 # These likely won't have any repeated arguments or anything similar.
@@ -222,7 +235,7 @@ def makecchacky(depthstr, dotpath, target, sources, compiler, outoption, cflags,
 def makepp(depthstr, dotpath, target, ppfile):
     computepaths(depthstr, dotpath, target)
     targetfile = os.path.basename(target)
-    abspp(ppfile, os.path.join(hackydir, hackyfilename + ".pp"), treeloc, targetfile)
+    abspp(ppfile, os.path.join(hackydir, "pp", hackyppfilename), treeloc, targetfile)
 
 def makeinstall(depthstr, category, source, destdir):
     global backend
@@ -265,87 +278,6 @@ def makeinstall(depthstr, category, source, destdir):
 
     hackyfile.close()
 
-# This is used for Win32 binaries, and is different from unixish binaries (see makeprogram)
-def makeprogramwin32(depthstr, dotpath, target, ldflags, objfiles, libs, link_pdbfile, expand_ld = ""):
-    computepaths(depthstr, dotpath, target)
-    hackyfile = openhacky()
-
-    # We need to do a whole bunch of parsing here to tease out the dependencies
-    # any of ldflags, objfiles, libs could have libs or objs.
-    # One assumption: no spaces in any arguments.
-    def extract_lib_deps(arg):
-        print "ARGS: " + str(arg)
-        tokens = re.split(r"\s+", arg).__iter__()
-        dep_libs = []
-        external_libs = []
-        rest = []
-        while True:
-            try:
-                token = tokens.next()
-                utoken = token.upper()
-            except StopIteration:
-                break
-
-            if not token:
-                continue
-
-            # skip things that are arguments
-            if token[0] in ['-', '/']:
-                rest.append(token)
-                continue
-
-            # potential libraries; check to make sure that they're in the objdir
-            # Hmm. This is a little broken, but we can assume that any lib that's
-            # relative to our objdir will be ours (if it has a path), and there will
-            # always be a .lib along the .desc.. so we can always just depend on the .lib.
-            # This assumes that the .desc will always be generated as a byproduct of linking
-            # the .lib, at least when used with make/ninja/etc.  Visual Studio won't do that,
-            # but VS won't use our link command or our dependencies anyway.
-            if utoken.endswith(".LIB"):
-                if not ("/" in utoken or "\\" in utoken):
-                    # We don't care about bare "foo.lib"; just relative ones
-                    # XXX this will break if we build "foo.exe" in the same dir as "bar.lib"
-                    # but I don't think we have to worry about that
-                    external_libs.append(token)
-                    continue
-
-                rlib = relpath(utoken)
-                # if it starts with a '.' or a drive letter, then it's not inside
-                # our objdir
-                if re.match(r"^([a-zA-Z]:\.)", rlib):
-                    external_libs.append(token)
-                else:
-                    dep_libs.append(token)
-                continue
-            rest.append(token)
-        return (dep_libs, external_libs, rest)
-
-    dep_libs = []
-    external_libs = []
-    other_args = []
-    for arg in [ldflags, objfiles, libs]:
-        (dep, ext, rest) = extract_lib_deps(arg)
-        dep_libs = dep_libs + dep
-        external_libs = external_libs + ext
-        other_args = other_args + rest
-
-    # let's hope there are no positional arguments here, because they are going to get munged into oblivion
-    build_command = "%s -NOLOGO -OUT:%s -PDB:%s %s %s %s %s" % (expand_ld, target, link_pdbfile, " ".join(other_args), objfiles, " ".join(dep_libs), " ".join(external_libs))
-
-    depfiles = re.split(r"\s+", objfiles)
-    depfiles = map(relpath, depfiles + dep_libs)
-
-    extra_info = {
-        "ldflags": ldflags,
-        "objfiles": objfiles,
-        "libs": libs,
-        "link_pdbfile": link_pdbfile,
-        "expand_ld": expand_ld
-    }
-
-    emit_common(hackyfile, treeloc, target, depfiles, None, build_command, None, depthstr, dotpath, None, extra_info)
-    hackyfile.close()
-
 if __name__ == "__main__":
     global backend
     backend = None
@@ -379,9 +311,5 @@ if __name__ == "__main__":
             makepp(*args[1:])
         elif args[0] == "install":
             makeinstall(*args[1:])
-        elif args[0] == "program-win32":
-            makeprogramwin32(*args[1:])
-        elif args[0] == "program":
-            makeprogram(*args[1:])
         else:
             makehacky(*args)

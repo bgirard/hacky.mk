@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 
-import os, sys, re, uuid
+import os, sys, re, uuid, time
 
 DEBUG = True
+makehackypy = None
 tree_base = None
 
 # only matters for VS solutions, for now
@@ -26,11 +27,14 @@ def readpp(ppfile):
     deps.sort()
     return deps
 
+def isProjectTarget(target):
+    return target.endswith(".dll") or target.endswith(".exe")
+
 # Returns a hackyMap which maps
 # target -> hacky json notation
 def readhacky(tree_base):
     import json
-    hackydir = os.path.join(tree_base, ".hacky")
+    hackydir = os.path.join(tree_base, ".hacky", "hacky")
 
     hackyMap = {}
     for f in os.listdir(hackydir):
@@ -43,10 +47,10 @@ def readhacky(tree_base):
                 # os.join will add \ instead of / on windows
                 targetName = fJson["treeloc"] + "/" + fJson["target"]
                 hackyMap[targetName] = fJson
-                ppPath = hacky_path + ".pp"
+                ppPath = os.path.join(tree_base, ".hacky", "pp", f + ".pp")
                 if os.path.isfile(ppPath):
                     fJson['ppDeps'] = readpp(ppPath)
-                    if DEBUG and fJson["target"].endswith(".dll"):
+                    if DEBUG and isProjectTarget(fJson["target"]):
                         print "Adding target: " + fJson["target"] + " as: " + targetName
     return hackyMap
 
@@ -99,7 +103,20 @@ def genMsvcHeader(msvcProj, target):
     #     <CharacterSet>Unicode</CharacterSet> -- CharacterSet should be unset.
     # Including this defines _UNICODE/UNICODE.
     msvcProj.appendLineOpen('<PropertyGroup Condition="\'$(Configuration)|$(Platform)\'==\'GeckoImported|%s\'" Label="Configuration">' % msvcPlatform);
-    msvcProj.appendLine('<ConfigurationType>DynamicLibrary</ConfigurationType>');
+
+    if target["isDLL"]:
+        msvcProj.appendLine('<ConfigurationType>DynamicLibrary</ConfigurationType>');
+    elif target["isEXE"]:
+        msvcProj.appendLine('<ConfigurationType>Application</ConfigurationType>');
+    else:
+        print >>sys.stderr, "Unknown target type"
+        raise Exception
+
+    if msvcVersion == 2012:
+        msvcProj.appendLine('<PlatformToolset>v110</PlatformToolset>')
+    elif msvcVersion == 2013:
+        msvcProj.appendLine('<PlatformToolset>v120</PlatformToolset>')
+
     #msvcProj.appendLine('<UseDebugLibraries>true</UseDebugLibraries>');
     msvcProj.appendLineClose('</PropertyGroup>');
 
@@ -169,10 +186,11 @@ class MsvcPrinter:
     def getFilters(self):
         return "\n".join(self.filtersOut)
 
-def escapeForMsvcXML(str):
-    str = str.replace("<", "&lt;")
-    str = str.replace(">", "&gt;")
-    return str
+def escapeForMsvcXML(s):
+    s = s.replace("&", "&amp;")
+    s = s.replace("<", "&lt;")
+    s = s.replace(">", "&gt;")
+    return s
 
 def makeMsvcPath(treeloc, name, basepath=None):
     if basepath is None:
@@ -236,7 +254,12 @@ def genMsvcClCompileGroup(msvcProj, tree_root, hackyMap, target, clCompileMap):
                     defval = m.group(2)
                     if defval.startswith("'\"") and defval.endswith("\"'"):
                         arg = defname + "=\"\\\"" + defval[2:-2] + "\\\"\""
-
+                    elif defval.startswith("'") and defval.endswith("'") and not "\"" in defval:
+                        # replace -DFOO='foo' with -DFOO="foo".  Specifically to handle
+                        # -DR_PLATFORM_INT_TYPES='<stdint.h>' because '' isn't a quote char
+                        # to VS, so you end up with "#include '<stdint.h>'".
+                        arg = defname + "=\"" + defval[1:-1] + "\""
+                    #quotedDefines.append("/D " + arg)
                     quotedDefines.append("/D " + arg.replace('"', '\\"'))
                 else:
                     defines.append(arg)
@@ -401,9 +424,11 @@ def genMsvcClCompileGroup(msvcProj, tree_root, hackyMap, target, clCompileMap):
         clCompileHash["xmlLines"].append(config)
 
     if exceptionHandling != "false":
-        msvcProj.appendLine('<ExceptionHandling>%s</ExceptionHandling>' % exceptionHandling);
+        clCompileHash["xmlLines"].append('<ExceptionHandling>%s</ExceptionHandling>' % exceptionHandling);
+    # warn about leftover args, for tracing of what we're missing
     if extraArgStr:
         print "EXTRA CC ARGS for %s: %s" % (target["target"], extraArgStr)
+
     if quotedDefines:
         extraArgStr = " ".join(quotedDefines) + " " + extraArgStr
     if extraArgStr:
@@ -425,10 +450,13 @@ def genMsvcClCompileGroup(msvcProj, tree_root, hackyMap, target, clCompileMap):
     msvcProj.folders[folder] = True
     msvcProj.filtersLineClose('</ClCompile>')
 
-def genMsvcTargetCompile(msvcProj, tree_root, hackyMap, target):
-    objdeps = target["ppDeps"]
+def genMsvcLink(msvcProj, tree_root, hackyMap, target):
+    objdeps = []
     objsToLink = [] # Object
     clCompileMap = {}
+
+    if "ppDeps" in target:
+        objdeps = objdeps + target["ppDeps"]
 
     for objdep in objdeps:
         if objdep in hackyMap and "srcfiles" in hackyMap[objdep] and hackyMap[objdep]["srcfiles"]:
@@ -453,6 +481,8 @@ def genMsvcTargetCompile(msvcProj, tree_root, hackyMap, target):
     extraArgs = []
     importLibrary = None
     additionalLinkOptions = None
+    entryPoint = None
+    heapBase = None
 
     # parse libraries and args from the build command
     cmdline = target["build_command"]
@@ -556,6 +586,16 @@ def genMsvcTargetCompile(msvcProj, tree_root, hackyMap, target):
                 importLibrary = m.group(1)
                 continue
 
+            m = re.match(r"(?i)^[-/]ENTRY:(.*)", token)
+            if m:
+                entryPoint = m.group(1)
+                continue
+
+            m = re.match(r"(?i)^[-/]HEAP:(.*)", token)
+            if m:
+                heapBase = m.group(1)
+                continue
+
             # These had better be set in the global project settings properly
             if utoken.startswith("-DLL") or utoken.startswith("-MACHINE"):
                 continue
@@ -593,6 +633,7 @@ def genMsvcTargetCompile(msvcProj, tree_root, hackyMap, target):
             # an import lib).  We should double check that we're already
             # linking them and complain if we're not
             if utoken.endswith(".RES") or utoken.endswith(".OBJ"):
+                #print "CURRENT DIR OBJECT", token
                 continue
 
             extraArgs.append(token)
@@ -605,10 +646,11 @@ def genMsvcTargetCompile(msvcProj, tree_root, hackyMap, target):
     #if outFile.endswith(".dll"):
     #    outFile = outFile[:-4]
 
-    if importLibrary:
-        importLibrary = makeMsvcPath(target["treeloc"], importLibrary)
-    else:
-        importLibrary = makeMsvcPath(target["treeloc"], target["target"].replace(".dll", ".lib"))
+    if target["isDLL"]:
+        if importLibrary:
+            importLibrary = makeMsvcPath(target["treeloc"], importLibrary)
+        else:
+            importLibrary = makeMsvcPath(target["treeloc"], target["target"].replace(".dll", ".lib"))
 
     libPaths.append("$(LibraryPath)")
 
@@ -623,7 +665,12 @@ def genMsvcTargetCompile(msvcProj, tree_root, hackyMap, target):
     msvcProj.appendLineOpen('<Link>')
     msvcProj.appendLine('<GenerateDebugInformation>true</GenerateDebugInformation>')
     msvcProj.appendLine('<OutputFile>%s</OutputFile>' % outFile)
-    msvcProj.appendLine('<ImportLibrary>%s</ImportLibrary>' % importLibrary)
+    if importLibrary:
+        msvcProj.appendLine('<ImportLibrary>%s</ImportLibrary>' % importLibrary)
+    if entryPoint:
+        msvcProj.appendLine('<EntryPointSymbol>%s</EntryPointSymbol>' % entryPoint)
+    if heapBase:
+        msvcProj.appendLine('<BaseAddress>%s</BaseAddress>' % heapBase)
     msvcProj.appendLine('<AdditionalDependencies>%s</AdditionalDependencies>' % ";".join(objsToLink))
     if additionalLinkOptions:
         msvcProj.appendLine('<AdditionalOptions>%s</AdditionalOptions>' % " ".join(additionalLinkOptions))
@@ -637,23 +684,34 @@ def genMsvcTargetCompile(msvcProj, tree_root, hackyMap, target):
     extraArgStr = " ".join(extraArgs).strip()
     if extraArgStr:
         print "Leftover Additional Args for %s: %s" % (target["target"], extraArgStr)
-        msvcProj.appendLine('<AdditionalOptions>%s</AdditionalOptions>' % extraArgStr)
+        msvcProj.appendLine('<AdditionalOptions>%s</AdditionalOptions>' % escapeForMsvcXML(extraArgStr))
 
     # don't generate a /TLBID arg for us
     msvcProj.appendLine('<TypeLibraryResourceID></TypeLibraryResourceID>')
     msvcProj.appendLineClose('</Link>')
 
     msvcProj.appendLineOpen('<PostBuildEvent>')
-    msvcProj.appendLine('<Command>copy %s dist\\lib\ncopy %s dist\\bin</Command>' % (outFile.replace(".dll", ".lib"), outFile))
+    preCmd = ""
+    if importLibrary:
+        preCmd = "copy %s dist\\lib\n" % outFile.replace(".dll", ".lib")
+    msvcProj.appendLine('<Command>%scopy %s dist\\bin</Command>' % (preCmd, outFile))
     msvcProj.appendLineClose('</PostBuildEvent>')
 
     msvcProj.appendLineClose('</ItemDefinitionGroup>')
             
 
 def genMsvc(tree_root, hackyMap, target):
+    target["isDLL"] = False
+    target["isEXE"] = False
+
+    if target["target"].endswith(".dll"):
+        target["isDLL"] = True
+    elif target["target"].endswith(".exe"):
+        target["isEXE"] = True
+
     msvcProj = MsvcPrinter()
     genMsvcHeader(msvcProj, target)
-    genMsvcTargetCompile(msvcProj, tree_root, hackyMap, target)
+    genMsvcLink(msvcProj, tree_root, hackyMap, target)
     genMsvcFooter(msvcProj)
     msvcfile = open(os.path.join(tree_root, target["target"] + ".vcxproj"), "w")
     print >>msvcfile, msvcProj.get()
@@ -696,14 +754,7 @@ def genMsvcSolution(tree_root, projects):
     msvcSlnfile = open(os.path.join(tree_root, "gecko.sln"), "w")
     print >>msvcSlnfile, data
 
-if __name__ == "__main__":
-    args = sys.argv
-
-    # save script name
-    makehackypy = os.path.abspath(args.pop(0))
-
-    tree_base = os.path.abspath(args.pop(0))
-
+def buildVisualStudioSolution():
     conffile = open(os.path.join(tree_base, "config/autoconf.mk"), "r")
     for line in conffile:
         m = re.match(r"([A-Z0-9_]+) *= *(.*)", line.strip())
@@ -714,27 +765,65 @@ if __name__ == "__main__":
                 is64Bit = True
                 msvcPlatform = "x64"
             elif arg == "CC_VERSION":
+                global msvcVersion
                 if val.find("16.") == 0:
-                    msvcVersion = "2010"
+                    msvcVersion = 2010
                 elif val.find("17.") == 0:
-                    msvcVersion = "2012"
+                    msvcVersion = 2012
                 elif val.find("18.") == 0:
-                    msvcVersion = "2013"
+                    msvcVersion = 2013
 
     hackyMap = readhacky(tree_base)
 
     # generate guids for each project
     for targetName in hackyMap:
-        if targetName.endswith(".dll"):
+        if isProjectTarget(targetName):
             hackyMap[targetName]["projectGuid"] = str(uuid.uuid1())
 
     # then go through them all
     solutionProjects = []
     for targetName in hackyMap:
-        if targetName.endswith(".dll"):
+        if isProjectTarget(targetName):
             #if not targetName.endswith("gkmedias.dll"): continue
             print "Generating: " + targetName
             solutionProjects.append({ "guid": hackyMap[targetName]["projectGuid"], "path": os.path.basename(targetName).encode("utf-8") })
             genMsvc(tree_base, hackyMap, hackyMap[targetName])
 
     genMsvcSolution(tree_base, solutionProjects)
+    print >>sys.stdout, "Created gecko.sln"
+
+def buildNinjaBuild():
+    ninjabuild = open("build.ninja", "w")
+    ninjabuild.write("# AUTOMATICALLY GENERATED BY hackypost ON " + time.ctime() + "\n")
+
+    baseninja = open(os.path.join(os.path.dirname(makehackypy), "hacky.ninja"), "r")
+    for line in baseninja:
+        ninjabuild.write(line)
+    baseninja.close()
+    
+    for fn in os.listdir(os.path.join(".hacky", "ninja")):
+        if not fn.endswith(".ninja"):
+            continue
+        with file(os.path.join(".hacky", "ninja", fn), "r") as fragment:
+            for line in fragment:
+                ninjabuild.write(line)
+    ninjabuild.close()
+    print >>sys.stdout, "Created build.ninja"
+
+if __name__ == "__main__":
+    args = sys.argv
+
+    # save script name
+    makehackypy = os.path.abspath(args.pop(0))
+    tree_base = os.path.abspath(args.pop(0))
+
+    targets = ["msvs", "ninja"]
+
+    if len(args) > 0:
+        targets = args
+
+    if "msvs" in targets and os.name is 'nt':
+        buildVisualStudioSolution()
+
+    if "ninja" in targets:
+        buildNinjaBuild()
