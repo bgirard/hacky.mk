@@ -51,11 +51,29 @@ def computepaths(depthstr, dotpath, target):
     # and fix up makehackypy
     makehackypy = os.path.relpath(makehackypy, dotpath).replace("\\", "/")
 
+def ensuredirexists(d):
+    '''Ensure that the given d exists, in a race-safe way.'''
+    if os.path.exists(d) and not os.path.isdir(d):
+        raise Exception("Can't create dectory %d because it exists, "
+                        "and is not a dectory!" % d)
+
+    if not os.path.exists(d):
+        try:
+            # mkdir will raise an OSError if the d exists.  We can't catch
+            # specifically this exception, but we can catch OSErrors in general
+            # and then check whether the d now exists.
+            os.mkdir(d)
+        except OSError as e:
+            pass
+
+    if not os.path.exists(d):
+        raise e
+
 # given a ppfile in ppfile, the target's directory in targetdir, and
 # an objroot in objroot, generate a new file in outfile that contains
 # relative-to-objroot dependencies
 def abspp(ppfile, outfile, targetdir, targetname):
-    if not os.path.exists(os.path.dirname(outfile)): os.mkdir(os.path.dirname(outfile))
+    ensuredirexists(os.path.dirname(outfile))
 
     try:
         fpin = file(ppfile, "r")
@@ -114,8 +132,8 @@ def depstolist(deps, root=objroot):
 def openhacky():
     global hackyfilename
     # make the toplevel .hacky if it doesn't exist
-    if not os.path.exists(hackydir): os.mkdir(hackydir)
-    if not os.path.exists(os.path.join(hackydir, backend)): os.mkdir(os.path.join(hackydir, backend))
+    ensuredirexists(hackydir)
+    ensuredirexists(os.path.join(hackydir, backend))
 
     hackyfile = file(os.path.join(hackydir, backend, hackyfilename), "w")
     #print >>sys.stderr, ("Open '%s'" % os.path.join(hackydir, backend, hackyfilename))
