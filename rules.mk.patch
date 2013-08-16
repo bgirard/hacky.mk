@@ -1,38 +1,38 @@
 diff --git a/config/rules.mk b/config/rules.mk
+index 4bb66d1..4cebb27 100644
 --- a/config/rules.mk
 +++ b/config/rules.mk
-@@ -863,16 +863,25 @@ alltags:
- # PROGRAM = Foo
- # creates OBJS, links with LIBS to create Foo
- #
- $(PROGRAM): $(PROGOBJS) $(EXTRA_DEPS) $(EXE_DEF_FILE) $(RESFILE) $(GLOBAL_DEPS)
- 	$(REPORT_BUILD)
+@@ -870,20 +870,15 @@ $(PROGRAM): $(PROGOBJS) $(EXTRA_DEPS) $(EXE_DEF_FILE) $(RESFILE) $(GLOBAL_DEPS)
  	@$(RM) $@.manifest
  ifeq (_WINNT,$(GNU_CC)_$(OS_ARCH))
  	$(EXPAND_LD) -NOLOGO -OUT:$@ -PDB:$(LINK_PDBFILE) $(WIN32_EXE_LDFLAGS) $(LDFLAGS) $(MOZ_GLUE_PROGRAM_LDFLAGS) $(PROGOBJS) $(RESFILE) $(LIBS) $(EXTRA_LIBS) $(OS_LIBS)
-+	@$(PYTHON) $(topsrcdir)/tools/hackymake/makehacky.py program-win32 \
+-ifdef MSMANIFEST_TOOL
+-	@if test -f $@.manifest; then \
+-		if test -f "$(srcdir)/$@.manifest"; then \
+-			echo "Embedding manifest from $(srcdir)/$@.manifest and $@.manifest"; \
+-			mt.exe -NOLOGO -MANIFEST "$(win_srcdir)/$@.manifest" $@.manifest -OUTPUTRESOURCE:$@\;1; \
+-		else \
+-			echo "Embedding manifest from $@.manifest"; \
+-			mt.exe -NOLOGO -MANIFEST $@.manifest -OUTPUTRESOURCE:$@\;1; \
+-		fi; \
+-	elif test -f "$(srcdir)/$@.manifest"; then \
+-		echo "Embedding manifest from $(srcdir)/$@.manifest"; \
+-		mt.exe -NOLOGO -MANIFEST "$(win_srcdir)/$@.manifest" -OUTPUTRESOURCE:$@\;1; \
+-	fi
+-endif	# MSVC with manifest tool
++	$(topsrcdir)/tools/handle-win32-manifest.sh "$(MSMANIFEST_TOOL)" "$@" "$@.manifest" "$(srcdir)/$@.manifest"
++	@$(PYTHON) $(topsrcdir)/tools/hackymake/makehacky.py \
 +		"$(if $(TOP_DIST),$(TOP_DIST)/..,$(DEPTH))" \
 +		"$(realpath .)" \
 +		"$@" \
-+		"$(WIN32_EXE_LDFLAGS) $(LDFLAGS) $(MOZ_GLUE_PROGRAM_LDFLAGS)" \
-+		"$(PROGOBJS) $(RESFILE)" \
-+		"$(LIBS) $(EXTRA_LIBS) $(OS_LIBS)" \
-+		"$(LINK_PDBFILE)" \
-+		"$(EXPAND_LD)"
- ifdef MSMANIFEST_TOOL
- 	@if test -f $@.manifest; then \
- 		if test -f "$(srcdir)/$@.manifest"; then \
- 			echo "Embedding manifest from $(srcdir)/$@.manifest and $@.manifest"; \
- 			mt.exe -NOLOGO -MANIFEST "$(win_srcdir)/$@.manifest" $@.manifest -OUTPUTRESOURCE:$@\;1; \
- 		else \
- 			echo "Embedding manifest from $@.manifest"; \
- 			mt.exe -NOLOGO -MANIFEST $@.manifest -OUTPUTRESOURCE:$@\;1; \
-@@ -972,22 +981,36 @@ EXTRA_DEPS += $(DTRACE_PROBE_OBJ)
- OBJS += $(DTRACE_PROBE_OBJ)
- endif
- 
- $(filter %.$(LIB_SUFFIX),$(LIBRARY)): $(OBJS) $(EXTRA_DEPS) $(GLOBAL_DEPS)
- 	$(REPORT_BUILD)
++		"$(subst ",^^,$(filter-out $@.manifest,$(PROGOBJS) $(EXTRA_DEPS) $(EXE_DEF_FILE) $(RESFILE)))" \
++		"$(subst ",^^,$(EXPAND_LD) -NOLOGO -OUT:$@ -PDB:$(LINK_PDBFILE) $(WIN32_EXE_LDFLAGS) $(LDFLAGS) $(MOZ_GLUE_PROGRAM_LDFLAGS) $(PROGOBJS) $(RESFILE) $(LIBS) $(EXTRA_LIBS) $(OS_LIBS) && $(topsrcdir)/tools/handle-win32-manifest.sh \"$(MSMANIFEST_TOOL)\" \"$@\" \"$@.manifest\" \"$(srcdir)/$@.manifest\")" \
++		"" \
++		"$(MDDEPDIR)/$(@F).pp"
+ ifdef MOZ_PROFILE_GENERATE
+ # touch it a few seconds into the future to work around FAT's
+ # 2-second granularity
+@@ -979,12 +974,26 @@ $(filter %.$(LIB_SUFFIX),$(LIBRARY)): $(OBJS) $(EXTRA_DEPS) $(GLOBAL_DEPS)
  	$(RM) $(LIBRARY)
  	$(EXPAND_AR) $(AR_FLAGS) $(OBJS) $(SHARED_LIBRARY_LIBS)
  	$(RANLIB) $@
@@ -54,61 +54,40 @@ diff --git a/config/rules.mk b/config/rules.mk
 +		"$(realpath .)" \
 +		"$@" \
 +		"$(filter %.$(LIB_SUFFIX),$(LIBRARY)) $(OBJS) $(EXTRA_DEPS)" \
-+		"$(if $(filter %.$(LIB_SUFFIX),$(LIBRARY)),true,$(RM) $(REAL_LIBRARY) $(EXPORT_LIBRARY:%=%/$(REAL_LIBRARY))) && $(EXPAND_LIBS    _GEN) -o $@ $(OBJS) $(SHARED_LIBRARY_LIBS)" \
++		"$(if $(filter %.$(LIB_SUFFIX),$(LIBRARY)),true,$(RM) $(REAL_LIBRARY) $(EXPORT_LIBRARY:%=%/$(REAL_LIBRARY))) && $(EXPAND_LIBS_GEN) -o $@ $(OBJS) $(SHARED_LIBRARY_LIBS)" \
 +		""
  
  ifeq ($(OS_ARCH),WINNT)
  # Import libraries are created by the rules creating shared libraries.
- # The rules to copy them to $(DIST)/lib depend on $(IMPORT_LIBRARY),
- # but make will happily consider the import library before it is refreshed
- # when rebuilding the corresponding shared library. Defining an empty recipe
- # for import libraries forces make to wait for the shared library recipe to
- # have run before considering other targets that depend on the import library.
-@@ -1039,24 +1062,34 @@ endif
- $(SHARED_LIBRARY): $(OBJS) $(DEF_FILE) $(RESFILE) $(LIBRARY) $(EXTRA_DEPS) $(GLOBAL_DEPS)
- 	$(REPORT_BUILD)
- ifndef INCREMENTAL_LINKER
- 	$(RM) $@
- endif
+@@ -1046,14 +1055,22 @@ endif
  ifdef DTRACE_LIB_DEPENDENT
  ifndef XP_MACOSX
  	dtrace -G -C -s $(MOZILLA_DTRACE_SRC) -o  $(DTRACE_PROBE_OBJ) $(shell $(EXPAND_LIBS) $(MOZILLA_PROBE_LIBS))
-+	$(EXPAND_MKSHLIB) $(SHLIB_LDSTARTFILE) $(OBJS) $(SUB_SHLOBJS) $(DTRACE_PROBE_OBJ) $(MOZILLA_PROBE_LIBS) $(RESFILE) $(LDFLAGS) $(WRAP_LDFLAGS) $(SHARED_LIBRARY_LIBS) $(EXTRA_DSO_LDOPTS) $(MOZ_GLUE_LDFLAGS) $(OS_LIBS) $(EXTRA_LIBS) $(DEF_FILE) $(SHLIB_LDENDFILE) $(if $(LIB_IS_C_ONLY),,$(STLPORT_LIBS))
- endif
--	$(EXPAND_MKSHLIB) $(SHLIB_LDSTARTFILE) $(OBJS) $(SUB_SHLOBJS) $(DTRACE_PROBE_OBJ) $(MOZILLA_PROBE_LIBS) $(RESFILE) $(LDFLAGS) $(WRAP_LDFLAGS) $(SHARED_LIBRARY_LIBS) $(EXTRA_DSO_LDOPTS) $(MOZ_GLUE_LDFLAGS) $(OS_LIBS) $(EXTRA_LIBS) $(DEF_FILE) $(SHLIB_LDENDFILE) $(if $(LIB_IS_C_ONLY),,$(STLPORT_LIBS))
-+endif
-+	$(EXPAND_MKSHLIB) $(SHLIB_LDSTARTFILE) $(OBJS) $(SUB_SHLOBJS) $(RESFILE) $(LDFLAGS) $(WRAP_LDFLAGS) $(SHARED_LIBRARY_LIBS) $(EXTRA_DSO_LDOPTS) $(MOZ_GLUE_LDFLAGS) $(OS_LIBS) $(EXTRA_LIBS) $(DEF_FILE) $(SHLIB_LDENDFILE) $(if $(LIB_IS_C_ONLY),,$(STLPORT_LIBS))
-+ifdef DTRACE_LIB_DEPENDENT
- 	@$(RM) $(DTRACE_PROBE_OBJ)
+-endif
+ 	$(EXPAND_MKSHLIB) $(SHLIB_LDSTARTFILE) $(OBJS) $(SUB_SHLOBJS) $(DTRACE_PROBE_OBJ) $(MOZILLA_PROBE_LIBS) $(RESFILE) $(LDFLAGS) $(WRAP_LDFLAGS) $(SHARED_LIBRARY_LIBS) $(EXTRA_DSO_LDOPTS) $(MOZ_GLUE_LDFLAGS) $(OS_LIBS) $(EXTRA_LIBS) $(DEF_FILE) $(SHLIB_LDENDFILE) $(if $(LIB_IS_C_ONLY),,$(STLPORT_LIBS))
+-	@$(RM) $(DTRACE_PROBE_OBJ)
 -else # ! DTRACE_LIB_DEPENDENT
--	$(EXPAND_MKSHLIB) $(SHLIB_LDSTARTFILE) $(OBJS) $(SUB_SHLOBJS) $(RESFILE) $(LDFLAGS) $(WRAP_LDFLAGS) $(SHARED_LIBRARY_LIBS) $(EXTRA_DSO_LDOPTS) $(MOZ_GLUE_LDFLAGS) $(OS_LIBS) $(EXTRA_LIBS) $(DEF_FILE) $(SHLIB_LDENDFILE) $(if $(LIB_IS_C_ONLY),,$(STLPORT_LIBS))
++endif
++endif
+ 	$(EXPAND_MKSHLIB) $(SHLIB_LDSTARTFILE) $(OBJS) $(SUB_SHLOBJS) $(RESFILE) $(LDFLAGS) $(WRAP_LDFLAGS) $(SHARED_LIBRARY_LIBS) $(EXTRA_DSO_LDOPTS) $(MOZ_GLUE_LDFLAGS) $(OS_LIBS) $(EXTRA_LIBS) $(DEF_FILE) $(SHLIB_LDENDFILE) $(if $(LIB_IS_C_ONLY),,$(STLPORT_LIBS))
 -endif # DTRACE_LIB_DEPENDENT
++ifdef DTRACE_LIB_DEPENDENT
++	@$(RM) $(DTRACE_PROBE_OBJ)
 +endif
 +	@$(PYTHON) $(topsrcdir)/tools/hackymake/makehacky.py \
 +		"$(if $(TOP_DIST),$(TOP_DIST)/..,$(DEPTH))" \
 +		"$(realpath .)" \
 +		"$@" \
-+		"$(subst ",^^,$(OBJS)) $(subst ",^^,$(DEF_FILE)) $(subst ",^^,$(LIBRARY)) $(subst ",^^,$(EXTRA_DEPS))" \
-+		"$(EXPAND_MKSHLIB) $(subst ",^^,$(SHLIB_LDSTARTFILE)) $(subst ",^^,$(OBJS)) $(subst ",^^,$(SUB_SHLOBJS)) $(DTRACE_PROBE_OBJ)     $(MOZILLA_PROBE_LIBS)  $(subst ",^^,$(RESFILE)) $(subst ",^^,$(LDFLAGS)) $(subst ",^^,$(WRAP_LDFLAGS)) $(subst ",^^,$(SHARED_LIBRAR    Y_LIBS))  $(subst ",^^,$(EXTRA_DSO_LDOPTS))  $(subst ",^^,$(MOZ_GLUE_LDFLAGS)) $(subst ",^^,$(OS_LIBS)) $(subst ",^^,$(EXTRA_LIBS))     $(subst ",^^,$(DEF_FILE)) $(subst ",^^,$(SHLIB_LDENDFILE)) $(if $(LIB_IS_C_ONLY),,$(STLPORT_LIBS))" \
++		"$(subst ",^^,$(OBJS) $(DEF_FILE) $(LIBRARY) $(EXTRA_DEPS))" \
++		"$(subst ",^^,$(EXPAND_MKSHLIB) $(SHLIB_LDSTARTFILE) $(OBJS) $(SUB_SHLOBJS) $(RESFILE) $(LDFLAGS) $(WRAP_LDFLAGS) $(SHARED_LIBRARY_LIBS) $(EXTRA_DSO_LDOPTS) $(MOZ_GLUE_LDFLAGS) $(OS_LIBS) $(EXTRA_LIBS) $(DEF_FILE) $(SHLIB_LDENDFILE) $(if $(LIB_IS_C_ONLY),,$(STLPORT_LIBS)))" \
 +		$(IMPORT_LIBRARY) \
 +		"$(MDDEPDIR)/$(@F).pp"
  	@$(call CHECK_STDCXX,$@)
- 
-+
+-
  ifeq (_WINNT,$(GNU_CC)_$(OS_ARCH))
  ifdef MSMANIFEST_TOOL
  ifdef EMBED_MANIFEST_AT
- 	@if test -f $@.manifest; then \
- 		mt.exe -NOLOGO -MANIFEST $@.manifest -OUTPUTRESOURCE:$@\;$(EMBED_MANIFEST_AT); \
- 		rm -f $@.manifest; \
- 	fi
- endif   # EMBED_MANIFEST_AT
-@@ -1125,16 +1158,26 @@ endef
- $(HOST_CMMOBJS): host_%.$(OBJ_SUFFIX): %.mm
- 	$(REPORT_BUILD)
- 	$(ELOG) $(HOST_CXX) $(HOST_OUTOPTION)$@ -c $(HOST_CXXFLAGS) $(HOST_CMMFLAGS) $(INCLUDES) $(NSPR_CFLAGS) $(_VPATH_SRCS)
- 
- $(COBJS):
+@@ -1132,6 +1149,16 @@ $(COBJS):
  	$(REPORT_BUILD)
  	@$(MAKE_DEPS_AUTO_CC)
  	$(ELOG) $(CC) $(OUTOPTION)$@ -c $(COMPILE_CFLAGS) $(TARGET_LOCAL_INCLUDES) $(_VPATH_SRCS)
@@ -125,17 +104,7 @@ diff --git a/config/rules.mk b/config/rules.mk
  
  # DEFINES and ACDEFINES are needed here to enable conditional compilation of Q_OBJECTs:
  # 'moc' only knows about #defines it gets on the command line (-D...), not in
- # included headers like mozilla-config.h
- moc_%.cpp: %.h
- 	$(REPORT_BUILD)
- 	$(ELOG) $(MOC) $(DEFINES) $(ACDEFINES) $< $(OUTOPTION)$@
- 
-@@ -1157,26 +1200,56 @@ endif
- $(SOBJS):
- 	$(REPORT_BUILD)
- 	$(AS) -o $@ $(ASFLAGS) $(LOCAL_INCLUDES) $(TARGET_LOCAL_INCLUDES) -c $<
- 
- $(CPPOBJS):
+@@ -1164,16 +1191,46 @@ $(CPPOBJS):
  	$(REPORT_BUILD)
  	@$(MAKE_DEPS_AUTO_CXX)
  	$(ELOG) $(CCC) $(OUTOPTION)$@ -c $(COMPILE_CXXFLAGS) $(TARGET_LOCAL_INCLUDES) $(_VPATH_SRCS)
@@ -161,7 +130,7 @@ diff --git a/config/rules.mk b/config/rules.mk
 +		"$(_VPATH_SRCS)" \
 +		"$(CCC)" \
 +		"$(OUTOPTION)" \
-+		"$(subst ",^^,$(COMPILE_CXXFLAGS)) $(subst ",^^,$(COMPILE_CMMFLAGS))" \
++		"$(subst ",^^,$(COMPILE_CXXFLAGS) $(COMPILE_CMMFLAGS))" \
 +		"$(subst ",^^,$(TARGET_LOCAL_INCLUDES))" \
 +		"$(MDDEPDIR)/$(@F).pp"
  
@@ -176,23 +145,13 @@ diff --git a/config/rules.mk b/config/rules.mk
 +		"$(_VPATH_SRCS)" \
 +		"$(CCC)" \
 +		"$(OUTOPTION)" \
-+		"$(subst ",^^,$(COMPILE_CFLAGS)) $(subst ",^^,$(COMPILE_CMFLAGS))" \
++		"$(subst ",^^,$(COMPILE_CFLAGS) $(COMPILE_CMFLAGS))" \
 +		"$(subst ",^^,$(TARGET_LOCAL_INCLUDES))" \
 +		"$(MDDEPDIR)/$(@F).pp"
  
  %.s: %.cpp $(call mkdir_deps,$(MDDEPDIR))
  	$(REPORT_BUILD)
- 	$(CCC) -S $(COMPILE_CXXFLAGS) $(TARGET_LOCAL_INCLUDES) $(_VPATH_SRCS)
- 
- %.s: %.cc $(call mkdir_deps,$(MDDEPDIR))
- 	$(REPORT_BUILD)
- 	$(CCC) -S $(COMPILE_CXXFLAGS) $(TARGET_LOCAL_INCLUDES) $(_VPATH_SRCS)
-@@ -1760,24 +1833,25 @@ endef
- endif
- endif
- 
- define install_file_template
- $(or $(3),libs):: $(2)/$(notdir $(1))
+@@ -1692,14 +1749,15 @@ $(or $(3),libs):: $(2)/$(notdir $(1))
  $(call install_cmd_override,$(2)/$(notdir $(1)))
  $(2)/$(notdir $(1)): $(1)
  	$$(call install_cmd,$(4) "$$<" "$${@D}")
@@ -210,8 +169,3 @@ diff --git a/config/rules.mk b/config/rules.mk
    )\
  )
  
- ################################################################################
- # Preprocessing rules
- #
- # The PP_TARGETS variable contains a list of all preprocessing target
- # categories. Each category has associated variables listing input files, the
