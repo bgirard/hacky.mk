@@ -817,7 +817,7 @@ if __name__ == "__main__":
     makehackypy = os.path.abspath(args.pop(0))
     tree_base = os.path.abspath(args.pop(0))
 
-    targets = ["msvs", "ninja"]
+    targets = ["ninja"]
 
     if len(args) > 0:
         targets = args
