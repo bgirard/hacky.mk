@@ -1,5 +1,5 @@
 diff --git a/config/rules.mk b/config/rules.mk
-index 4bb66d1..4cebb27 100644
+index 4bb66d1..0f218d2 100644
 --- a/config/rules.mk
 +++ b/config/rules.mk
 @@ -870,20 +870,15 @@ $(PROGRAM): $(PROGOBJS) $(EXTRA_DEPS) $(EXE_DEF_FILE) $(RESFILE) $(GLOBAL_DEPS)
@@ -80,7 +80,7 @@ index 4bb66d1..4cebb27 100644
 +		"$@" \
 +		"$(subst ",^^,$(OBJS) $(DEF_FILE) $(LIBRARY) $(EXTRA_DEPS))" \
 +		"$(subst ",^^,$(EXPAND_MKSHLIB) $(SHLIB_LDSTARTFILE) $(OBJS) $(SUB_SHLOBJS) $(RESFILE) $(LDFLAGS) $(WRAP_LDFLAGS) $(SHARED_LIBRARY_LIBS) $(EXTRA_DSO_LDOPTS) $(MOZ_GLUE_LDFLAGS) $(OS_LIBS) $(EXTRA_LIBS) $(DEF_FILE) $(SHLIB_LDENDFILE) $(if $(LIB_IS_C_ONLY),,$(STLPORT_LIBS)))" \
-+		$(IMPORT_LIBRARY) \
++		"$(if $(filter -IMPLIB:%,$(LDFLAGS)),$(subst -IMPLIB:,,$(filter -IMPLIB:%,$(filter-out -IMPLIB:fake.lib,$(LDFLAGS)))),$(IMPORT_LIBRARY))" \
 +		"$(MDDEPDIR)/$(@F).pp"
  	@$(call CHECK_STDCXX,$@)
 -
