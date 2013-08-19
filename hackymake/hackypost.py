@@ -121,7 +121,7 @@ def genMsvcHeader(msvcProj, target):
     msvcProj.appendLineClose('</PropertyGroup>');
 
     msvcProj.appendLine('<Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />');
-    
+
     msvcProj.appendLine('<PropertyGroup Label="UserMacros" />');
     msvcProj.appendLineOpen('<PropertyGroup Condition="\'$(Configuration)|$(Platform)\'==\'GeckoImported|%s\'">' % msvcPlatform);
     msvcProj.appendLine('<TargetPath>%s</TargetPath>' % escapeForMsvcXML(target["treeloc"]).replace("/","\\"));
@@ -147,7 +147,7 @@ def genMsvcFooter(msvcProj):
     msvcProj.appendLineOpen('<ImportGroup Label="ExtensionTargets">');
     msvcProj.appendLineClose('</ImportGroup>');
     msvcProj.appendLineClose('</Project>');
-    
+
     msvcProj.filtersLineClose("</ItemGroup>");
     msvcProj.generateFolders();
     msvcProj.filtersLineClose("</Project>");
@@ -698,7 +698,7 @@ def genMsvcLink(msvcProj, tree_root, hackyMap, target):
     msvcProj.appendLineClose('</PostBuildEvent>')
 
     msvcProj.appendLineClose('</ItemDefinitionGroup>')
-            
+
 
 def genMsvc(tree_root, hackyMap, target):
     target["isDLL"] = False
@@ -800,7 +800,7 @@ def buildNinjaBuild():
     for line in baseninja:
         ninjabuild.write(line)
     baseninja.close()
-    
+
     for fn in os.listdir(os.path.join(".hacky", "ninja")):
         if not fn.endswith(".ninja"):
             continue

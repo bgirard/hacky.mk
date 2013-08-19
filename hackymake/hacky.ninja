@@ -17,4 +17,3 @@ rule do_build
 rule do_install
   generator = true
   command = cp -f $in $out
-
