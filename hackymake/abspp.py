@@ -43,4 +43,3 @@ if __name__ == "__main__":
     basepath = None
   deps = abspp(sys.stdin, basepath)
   print " ".join(deps)
-
