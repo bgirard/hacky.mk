@@ -28,3 +28,6 @@ patch -d "$MC" --dry-run -s -f -p1 < "$WD"/rules.mk.patch || { echo Test patch f
 patch -d "$MC" -p1 < "$WD"/rules.mk.patch || { echo rules.mk.patch unexpectedly did not apply cleanly ; exit 1 ; }
 patch -d "$MC"/js/src -p1 < "$WD"/rules.mk.patch || { echo rules.mk.patch unexpectedly did not apply cleanly in js/src ; exit 1 ; }
 
+cp "$MC"/tools/hackymake/handle-win32-manifest.sh "$MC"/tools
+cp "$MC"/tools/hackymake/handle-win32-manifest.sh "$MC"/js/src/tools
+
