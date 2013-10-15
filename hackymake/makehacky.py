@@ -13,13 +13,30 @@ DEBUG = False
 # to Unix style.
 #
 
-
 makehackypy = None
 objroot = None
 hackydir = None
 treeloc = None
 hackyfilename = None
 hackyppfilename = None
+
+# NOTE: We have to pass in unicode strings here, because that will
+# trigger long path name handling in Python on Win32.  Otherwise
+# we'll be limited to very short paths, and we'll bomb out with
+# some of the long paths in the tree.
+def relpath(p, root = None):
+    if not root:
+        root = objroot
+    return str(os.path.relpath(unicode(p), unicode(root))).replace("\\", "/")
+
+def abspath(p):
+    return str(os.path.abspath(unicode(p))).replace("\\", "/")
+
+def joinpath(*ps):
+    return str(os.path.join(*map(lambda p: unicode(p), ps))).replace("\\", "/")
+
+def basename(p):
+    return str(os.path.basename(unicode(p))).replace("\\", "/")
 
 def gethackyext():
     global backend
@@ -35,27 +52,29 @@ def gethackyext():
 
 def computepaths(depthstr, dotpath, target):
     global makehackypy, objroot, hackydir, treeloc, hackyfilename, hackyppfilename
-    objroot = os.path.abspath(os.path.join(dotpath, depthstr)).replace("\\", "/")
-    hackydir = os.path.join(objroot, ".hacky").replace("\\", "/")
+    objroot = abspath(joinpath(dotpath, depthstr))
+    hackydir = joinpath(objroot, ".hacky")
 
     # figure out the path relative to the objroot (maybe abspath dotpath?)
-    treeloc = os.path.relpath(dotpath, objroot).replace("\\", "/")
+    treeloc = relpath(dotpath, objroot)
     hackybase = re.sub(r'[/\\]', '_', treeloc) + "_"
     # for things that are in the toplevel dir, the hacky files shouldn't
     # start with "._" because derp.
     if hackybase == "._":
         hackybase = ""
-    hackyfilename = hackybase + os.path.basename(target) + gethackyext()
-    hackyppfilename = hackybase + os.path.basename(target) + ".hacky.pp"
+    hackyfilename = hackybase + basename(target) + gethackyext()
+    hackyppfilename = hackybase + basename(target) + ".hacky.pp"
 
     # and fix up makehackypy
-    makehackypy = os.path.relpath(makehackypy, dotpath).replace("\\", "/")
+    makehackypy = relpath(makehackypy, dotpath)
 
 def ensuredirexists(d):
     '''Ensure that the given d exists, in a race-safe way.'''
+    # Unicodeify for windows
+    d = unicode(d)
     if os.path.exists(d) and not os.path.isdir(d):
         raise Exception("Can't create dectory %d because it exists, "
-                        "and is not a dectory!" % d)
+                        "and is not a dectory!" % str(d))
 
     if not os.path.exists(d):
         try:
@@ -102,12 +121,12 @@ def abspp(ppfile, outfile, targetdir, targetname):
             if re.match('[\w\\.]\.*', token):
                 # Some windows dependencies are poorly formed
                 # in the original .pp file
-                if not os.path.exists(token):
+                if not os.path.exists(unicode(token)):
                     continue
-                token = relpath(token, objroot).replace("\\", "/")
+                token = relpath(token, objroot)
                 deps.append(token)
             else:
-                if token != " " and token != ":" and not os.path.exists(token):
+                if token != " " and token != ":" and not os.path.exists(unicode(token)):
                     continue
                 deps.append(token)
     deps = list(set(deps))
@@ -119,29 +138,24 @@ def abspp(ppfile, outfile, targetdir, targetname):
     fpin.close()
     fpout.close()
 
-def relpath(p, root = None):
-    if not root:
-        root = objroot
-    return os.path.relpath(p, root).replace("\\", "/")
-
 def depstolist(deps, root=objroot):
     # get path names relative to root, but also use unix-style separators
     # even on Windows
-    return map(lambda p: relpath(p, root).replace("\\", "/"), deps.split())
+    return map(lambda p: relpath(p, root), deps.split())
 
 def openhacky():
     global hackyfilename
     # make the toplevel .hacky if it doesn't exist
     ensuredirexists(hackydir)
-    ensuredirexists(os.path.join(hackydir, backend))
+    ensuredirexists(joinpath(hackydir, backend))
 
-    hackyfile = file(os.path.join(hackydir, backend, hackyfilename), "w")
-    #print >>sys.stderr, ("Open '%s'" % os.path.join(hackydir, backend, hackyfilename))
+    hackyfile = file(joinpath(hackydir, backend, hackyfilename), "w")
+    #print >>sys.stderr, ("Open '%s'" % joinpath(hackydir, backend, hackyfilename))
     return hackyfile
 
 def emit_common(hackyfile, treeloc, target, depfiles, srcfiles, build_command, extra_outputs, depthstr, dotpath, ppfile = None, extra_info = []):
     global backend
-    targetfile = os.path.basename(target)
+    targetfile = basename(target)
 
     extra_outs = ""
     if extra_outputs:
@@ -167,7 +181,7 @@ def emit_common(hackyfile, treeloc, target, depfiles, srcfiles, build_command, e
 
         print >>hackyfile, "original::"
         print >>hackyfile, "\tcd %s && rm -f %s && $(MAKE) %s" % (treeloc, targetfile, targetfile)
-        print >>hackyfile, "%s: %s/Makefile" % (os.path.join(hackydir, "make", hackyfilename), treeloc)
+        print >>hackyfile, "%s: %s/Makefile" % (joinpath(hackydir, "make", hackyfilename), treeloc)
         print >>hackyfile, "\tcd %s && $(MAKE) %s" % (treeloc, targetfile)
 
     if backend == "hacky":
@@ -192,7 +206,7 @@ def emit_common(hackyfile, treeloc, target, depfiles, srcfiles, build_command, e
         # NOTE: we don't ever include this pp file; it gets included in the toplevel hacky.mk!
         # NOTE: we only generate this for the "hacky" backend, but everything depends on it!
         if ppfile:
-            abspp(ppfile, os.path.join(hackydir, "pp", hackyppfilename), treeloc, targetfile)
+            abspp(ppfile, joinpath(hackydir, "pp", hackyppfilename), treeloc, targetfile)
 
 # This is used for generic rules, everything other than compilation
 # These likely won't have any repeated arguments or anything similar.
@@ -232,8 +246,8 @@ def makecchacky(depthstr, dotpath, target, sources, compiler, outoption, cflags,
         print >>hackyfile, "#PPFILE:   %s" % (ppfile)
 
     depfiles = depstolist(sources, objroot)
-    srcfiles = depstolist(sources, os.path.join(objroot, treeloc))
-    targetfile = os.path.basename(target)
+    srcfiles = depstolist(sources, joinpath(objroot, treeloc))
+    targetfile = basename(target)
 
     build_command = "%s %s%s -c %s %s %s" % (compiler, outoption, targetfile, cflags, local_flags, " ".join(srcfiles))
 
@@ -252,8 +266,8 @@ def makecchacky(depthstr, dotpath, target, sources, compiler, outoption, cflags,
 
 def makepp(depthstr, dotpath, target, ppfile):
     computepaths(depthstr, dotpath, target)
-    targetfile = os.path.basename(target)
-    abspp(ppfile, os.path.join(hackydir, "pp", hackyppfilename), treeloc, targetfile)
+    targetfile = basename(target)
+    abspp(ppfile, joinpath(hackydir, "pp", hackyppfilename), treeloc, targetfile)
 
 def makeinstall(depthstr, category, source, destdir):
     global backend
@@ -261,16 +275,16 @@ def makeinstall(depthstr, category, source, destdir):
     if os.name is not 'nt':
         return
 
-    targetfile = os.path.basename(source)
+    targetfile = basename(source)
     computepaths(depthstr, ".", targetfile)
 
-    target = relpath(os.path.join(destdir, targetfile))
+    target = relpath(joinpath(destdir, targetfile))
     reldest = relpath(destdir)
 
     # hack -- redo this since we computed a proper target file now
     global hackyfilename
     hackybase = re.sub(r'[/\\]', '_', reldest)
-    hackyfilename = hackybase + "_" + os.path.basename(target) + gethackyext()
+    hackyfilename = hackybase + "_" + basename(target) + gethackyext()
 
     hackyfile = openhacky()
 
@@ -303,7 +317,7 @@ if __name__ == "__main__":
     args = sys.argv
 
     # save script name
-    makehackypy = os.path.abspath(args.pop(0))
+    makehackypy = abspath(args.pop(0))
 
     # we use "^^" as a " char to avoid weird quoting problems, e.g.
     # if someone's already escaping " via \"
